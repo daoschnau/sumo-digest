@@ -112,6 +112,8 @@ def main() -> int:
     arguments.add_argument("--period-from", help="начало периода, YYYY-MM-DD")
     arguments.add_argument("--force", action="store_true",
                            help="собрать выпуск, даже если за сегодня он уже есть")
+    arguments.add_argument("--ignore-seen", action="store_true",
+                           help="не пропускать статьи из seen_urls: пересобрать выпуск заново")
     arguments.add_argument("--model", default=os.getenv("SUMO_DIGEST_MODEL", DEFAULT_MODEL))
     options = arguments.parse_args()
 
@@ -135,9 +137,18 @@ def main() -> int:
         report["steps"][step] = round(time.monotonic() - clock, 1)
         clock = time.monotonic()
 
+    # Пересборка неудачного выпуска: статьи уже помечены показанными, и без этого
+    # корпус выйдет пустым. Нужно ровно тогда, когда выпуск вышел, но плохой.
+    seen_before = dict(state.seen_urls)
+    if options.ignore_seen:
+        state.seen_urls = {}
+        print("   seen_urls игнорируются: собираем корпус заново")
+
     print(f"1. collect · период с {state.last_issue_date}")
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     corpus = collect(config, state, today)
+    if options.ignore_seen:
+        state.seen_urls = seen_before
     save_corpus(corpus)
     took("collect")
     report["period"] = {"from": corpus.period_from, "to": corpus.period_to}
