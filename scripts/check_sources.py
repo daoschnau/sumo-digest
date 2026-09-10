@@ -129,17 +129,30 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
         print(f"      … ещё {len(matched) - show}")
 
     if not matched:
-        # Подбирать link_pattern вслепую невозможно — показываем, как ссылки
-        # на этой странице выглядят на самом деле.
+        # Подбирать link_pattern вслепую невозможно — показываем, какие адреса
+        # на странице есть на самом деле, сгруппированные по началу пути.
         host = urlsplit(str(response.url)).netloc
-        samples: dict[str, None] = {}
-        for href in parser.hrefs:
-            absolute = normalize(urljoin(str(response.url), href))
-            if urlsplit(absolute).netloc == host:
-                samples.setdefault(absolute, None)
-        print(f"    примеры ссылок этого хоста ({len(samples)} уникальных):")
-        for link in list(samples)[:15]:
-            print(f"      {link}")
+        everywhere: dict[str, None] = {}
+        raw_links = (parser.hrefs
+                     + ABSOLUTE_URL.findall(response.text)
+                     + QUOTED_PATH.findall(response.text))
+        for raw in raw_links:
+            absolute = normalize(urljoin(str(response.url), raw))
+            if urlsplit(absolute).netloc.endswith(host.split(".", 1)[-1]):
+                everywhere.setdefault(absolute, None)
+
+        groups: dict[str, list[str]] = {}
+        for link in everywhere:
+            parts = urlsplit(link)
+            segments = [x for x in parts.path.split("/") if x][:2]
+            key = f"{parts.netloc}/{'/'.join(segments)}"
+            groups.setdefault(key, []).append(link)
+
+        print(f"    адресов домена на странице: {len(everywhere)};"
+              f" группы по началу пути (сколько — пример):")
+        for key, links in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:15]:
+            print(f"      {len(links):>4}  {key}")
+            print(f"            {links[0]}")
 
     if parser.feeds:
         print("    RSS/Atom на странице:")
