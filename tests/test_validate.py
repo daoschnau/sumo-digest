@@ -99,16 +99,37 @@ def test_schema_violation_is_caught(digest, corpus):
         validate(digest, corpus)
 
 
-def test_blocks_are_sorted_by_significance_not_by_model_order():
+def test_significance_beats_category():
+    """Находка приёмки: дебют в дзюрё не должен стоять выше снятия ёкодзуны."""
     digest = {"blocks": [
-        {"category": "lower_divisions", "importance": 5, "date": "2026-09-10"},
-        {"category": "makuuchi_juryo", "importance": 3, "date": "2026-09-08"},
-        {"category": "makuuchi_juryo", "importance": 5, "date": "2026-09-09"},
-        {"category": "banzuke", "importance": 4, "date": "2026-09-10"},
+        {"category": "banzuke", "importance": 2, "date": "2026-09-10"},
+        {"category": "injury", "importance": 5, "date": "2026-09-10"},
+        {"category": "training", "importance": 5, "date": "2026-09-09"},
+        {"category": "makuuchi_juryo", "importance": 3, "date": "2026-09-10"},
     ]}
     order = [(b["category"], b["importance"]) for b in sort_blocks(digest)["blocks"]]
-    assert order == [("makuuchi_juryo", 5), ("makuuchi_juryo", 3),
-                     ("banzuke", 4), ("lower_divisions", 5)]
+    assert order == [("injury", 5), ("training", 5),
+                     ("makuuchi_juryo", 3), ("banzuke", 2)]
+
+
+def test_category_breaks_a_tie_in_significance():
+    digest = {"blocks": [
+        {"category": "training", "importance": 4, "date": "2026-09-10"},
+        {"category": "makuuchi_juryo", "importance": 4, "date": "2026-09-10"},
+        {"category": "injury", "importance": 4, "date": "2026-09-10"},
+    ]}
+    order = [b["category"] for b in sort_blocks(digest)["blocks"]]
+    assert order == ["makuuchi_juryo", "injury", "training"]
+
+
+def test_fresher_first_and_undated_last_within_a_group():
+    digest = {"blocks": [
+        {"category": "injury", "importance": 4},
+        {"category": "injury", "importance": 4, "date": "2026-09-08"},
+        {"category": "injury", "importance": 4, "date": "2026-09-10"},
+    ]}
+    order = [b.get("date") for b in sort_blocks(digest)["blocks"]]
+    assert order == ["2026-09-10", "2026-09-08", None]
 
 
 def test_api_schema_drops_what_structured_outputs_rejects():

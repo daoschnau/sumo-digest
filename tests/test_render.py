@@ -132,6 +132,7 @@ def test_relint_carries_a_new_rule_into_the_published_archive(tmp_path):
 
     changed = relint_archive(archive)
     assert changed and changed[0][0] == "2026-09-10.json"
+    assert changed[0][1], "замены обязаны попасть в отчёт"
 
     fixed = json.loads((archive / "2026-09-10.json").read_text(encoding="utf-8"))
     assert "Дайейшо" in fixed["lead"] and "Даиешо" not in fixed["lead"]
@@ -149,3 +150,25 @@ def test_relint_leaves_a_clean_archive_alone(tmp_path):
         json.dumps(issue("2026-09-07", "Озеки Киришима готов к Аки Басё."),
                    ensure_ascii=False), encoding="utf-8")
     assert relint_archive(archive) == []
+
+
+def test_relint_reorders_an_archive_written_under_the_old_rule(tmp_path):
+    """Порядок блоков — тоже правило: архив переезжает на него вместе с текстом."""
+    import json
+
+    from sumo_digest.render import relint_archive
+
+    archive = tmp_path / "issues"
+    archive.mkdir()
+    stale = issue("2026-09-10", "Главное за период — травмы лидеров.")
+    minor = json.loads(json.dumps(stale["blocks"][0]))
+    minor.update(subtitle="Дебют в дзюрё", category="banzuke", importance=2)
+    stale["blocks"] = [minor, stale["blocks"][0]]
+    (archive / "2026-09-10.json").write_text(json.dumps(stale, ensure_ascii=False),
+                                             encoding="utf-8")
+
+    name, fixes, reordered = relint_archive(archive)[0]
+    assert reordered and not fixes
+
+    fixed = json.loads((archive / "2026-09-10.json").read_text(encoding="utf-8"))
+    assert fixed["blocks"][0]["importance"] == 5

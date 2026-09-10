@@ -18,6 +18,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .translit import lint_digest
+from .validate import sort_blocks
 
 TEMPLATES = Path("templates")
 ISSUES = Path("data/issues")
@@ -118,8 +119,11 @@ def render_site(issues: list[dict], out_dir: Path = SITE,
     return written
 
 
-def relint_archive(directory: Path = ISSUES) -> list[tuple[str, list]]:
+def relint_archive(directory: Path = ISSUES) -> list[tuple[str, list, bool]]:
     """Прогоняет архив через текущие правила транслитерации и переписывает файлы.
+
+    Заодно пересортировывает блоки текущим правилом: порядок — тоже правило,
+    и менять его задним числом для архива нужно так же, как написание.
 
     Нужно каждый раз, когда в config/translit_rules.yml добавляется правило:
     новое написание должно доехать и до старых выпусков, а не только до будущих.
@@ -127,12 +131,15 @@ def relint_archive(directory: Path = ISSUES) -> list[tuple[str, list]]:
     changed: list[tuple[str, list]] = []
     for path in sorted(directory.glob("*.json")):
         issue = json.loads(path.read_text(encoding="utf-8"))
+        before = [block.get("subtitle") for block in issue.get("blocks", [])]
         fixed, report = lint_digest(issue)
-        if not report.fixes:
+        fixed = sort_blocks(fixed)
+        reordered = [block.get("subtitle") for block in fixed.get("blocks", [])] != before
+        if not report.fixes and not reordered:
             continue
         path.write_text(json.dumps(fixed, ensure_ascii=False, indent=2) + "\n",
                         encoding="utf-8")
-        changed.append((path.name, report.fixes))
+        changed.append((path.name, report.fixes, reordered))
     return changed
 
 
@@ -147,9 +154,11 @@ def main() -> int:
     options = arguments.parse_args()
 
     if options.relint:
-        for name, fixes in relint_archive(options.issues):
-            listed = ", ".join(f"«{w}» → «{r}» ×{n}" for w, r, n in fixes)
-            print(f"поправлен {name}: {listed}")
+        for name, fixes, reordered in relint_archive(options.issues):
+            listed = [f"«{w}» → «{r}» ×{n}" for w, r, n in fixes]
+            if reordered:
+                listed.append("блоки переставлены")
+            print(f"поправлен {name}: {', '.join(listed)}")
 
     issues = load_issues(options.issues)
     if not issues:

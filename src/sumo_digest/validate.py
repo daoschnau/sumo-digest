@@ -88,20 +88,30 @@ def check_facts(digest: dict, corpus: Corpus) -> list[str]:
     return problems
 
 
+def block_order(block: dict) -> tuple[int, int, int]:
+    """Ключ сортировки: значимость, потом категория, потом свежесть.
+
+    Категории спецификации пересекаются — снятие ёкодзуны это и `injury`,
+    и новость макуути, — и при сортировке по категории дебют в дзюрё оказывался
+    выше снятия ёкодзуны (находка приёмки 10.09.2026). Поэтому первым идёт
+    `importance`: что важнее, решает содержание, а не рубрика.
+    Блоки без даты уходят вниз своей группы.
+    """
+    when = block.get("date")
+    return (
+        -int(block.get("importance", 1)),
+        CATEGORY_RANK.get(block.get("category", "other"), 9),
+        -date.fromisoformat(when).toordinal() if when else 0,
+    )
+
+
 def sort_blocks(digest: dict) -> dict:
     """Порядок блоков определяет код, а не модель.
 
     Модель систематически ставит первым то, о чём написала подробнее,
     а не то, что важнее.
     """
-    digest["blocks"] = sorted(
-        digest.get("blocks", []),
-        key=lambda block: (
-            CATEGORY_RANK.get(block.get("category", "other"), 9),
-            -int(block.get("importance", 1)),
-            block.get("date") or "",
-        ),
-    )
+    digest["blocks"] = sorted(digest.get("blocks", []), key=block_order)
     return digest
 
 

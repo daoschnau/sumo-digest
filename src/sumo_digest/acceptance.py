@@ -21,7 +21,7 @@ import yaml
 
 from .render import ISSUES
 from .translit import lint_digest
-from .validate import CATEGORY_RANK, MAX_BLOCKS, MIN_BLOCKS
+from .validate import MAX_BLOCKS, MIN_BLOCKS, block_order
 
 SOURCES = Path("config/sources.yml")
 KANJI = re.compile(r"[㐀-鿿]")
@@ -74,9 +74,8 @@ def check_issue(issue: dict) -> list[Check]:
                         MIN_BLOCKS <= count <= MAX_BLOCKS or issue.get("quiet_period"),
                         f"блоков: {count}"))
 
-    ranks = [(CATEGORY_RANK.get(b.get("category", "other"), 9), -int(b.get("importance", 1)))
-             for b in blocks]
-    checks.append(Check("Блоки отсортированы по значимости", ranks == sorted(ranks)))
+    order = [block_order(block) for block in blocks]
+    checks.append(Check("Блоки отсортированы по значимости", order == sorted(order)))
 
     used: dict[str, int] = {}
     for block in blocks:
