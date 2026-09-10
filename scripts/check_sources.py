@@ -139,7 +139,9 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
                      + QUOTED_PATH.findall(response.text))
         for raw in raw_links:
             absolute = normalize(urljoin(str(response.url), raw))
-            if urlsplit(absolute).netloc.endswith(host.split(".", 1)[-1]):
+            # Хост не фильтруем: часть изданий держит статьи на соседнем домене
+            # (dmenu — на topics.smt.docomo.ne.jp), и именно он нам и нужен.
+            if urlsplit(absolute).netloc:
                 everywhere.setdefault(absolute, None)
 
         groups: dict[str, list[str]] = {}
@@ -149,9 +151,9 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
             key = f"{parts.netloc}/{'/'.join(segments)}"
             groups.setdefault(key, []).append(link)
 
-        print(f"    адресов домена на странице: {len(everywhere)};"
+        print(f"    адресов на странице: {len(everywhere)};"
               f" группы по началу пути (сколько — пример):")
-        for key, links in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:12]:
+        for key, links in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:14]:
             print(f"      {len(links):>4}  {key}")
             print(f"            {links[0]}")
 
