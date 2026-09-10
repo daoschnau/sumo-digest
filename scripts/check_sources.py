@@ -36,6 +36,7 @@ MIN_LINKS = 5  # критерий готовности E0 из ROADMAP.md
 ABSOLUTE_URL = re.compile(r"https?://[^\s\"'<>\\)]{8,}")
 QUOTED_PATH = re.compile(r"[\"'](/[^\"'\s<>\\]{3,})[\"']")
 FEEDISH = re.compile(r"(rss|atom|feed|\.xml)", re.IGNORECASE)
+API_LIKE = re.compile(r"(/api/|\.json|graphql|wp-json|/feed|rss)", re.IGNORECASE)
 
 
 class PageLinks(HTMLParser):
@@ -150,9 +151,28 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
 
         print(f"    адресов домена на странице: {len(everywhere)};"
               f" группы по началу пути (сколько — пример):")
-        for key, links in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:15]:
+        for key, links in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:12]:
             print(f"      {len(links):>4}  {key}")
             print(f"            {links[0]}")
+
+        # Если список статей подгружается со стороннего хоста, он виден только здесь.
+        external: dict[str, int] = {}
+        api_like: dict[str, None] = {}
+        for raw in raw_links:
+            absolute = urljoin(str(response.url), raw)
+            netloc = urlsplit(absolute).netloc
+            if netloc and not netloc.endswith(host.split(".", 1)[-1]):
+                external[netloc] = external.get(netloc, 0) + 1
+            if API_LIKE.search(absolute):
+                api_like.setdefault(normalize(absolute), None)
+
+        if external:
+            top = sorted(external.items(), key=lambda kv: -kv[1])[:8]
+            print("    внешние хосты: " + ", ".join(f"{h} ({n})" for h, n in top))
+        if api_like:
+            print("    адреса, похожие на API или фид:")
+            for link in list(api_like)[:8]:
+                print(f"      {link}")
 
     if parser.feeds:
         print("    RSS/Atom на странице:")

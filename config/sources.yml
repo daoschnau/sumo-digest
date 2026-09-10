@@ -43,7 +43,8 @@ sources:
     lang: ja
     enabled: true
     listing_url: "https://www.nikkansports.com/battle/sumo/"
-    rss: null
+    # Найден на E0 через автодискавери. Использовать на E1 вместо разбора листинга.
+    rss: "https://www.nikkansports.com/battle/sumo/atom.xml"
     link_pattern: "/battle/sumo/news/\\d+\\.html"
 
   - id: sanspo
@@ -62,7 +63,9 @@ sources:
     enabled: true
     listing_url: "https://www3.nhk.or.jp/news/word/0000003.html"
     rss: null
-    link_pattern: "/news/html/\\d+/k\\d+\\.html"
+    # Проверено на E0: страница отдаёт ссылки на новый сайт news.web.nhk,
+    # статьи там вида /newsweb/na/nd-20260907de48801. Старый /news/html/… мёртв.
+    link_pattern: "news\\.web\\.nhk/newsweb/na/nd-[0-9a-z]+"
 
   - id: sankei
     name: Sankei
@@ -99,7 +102,8 @@ sources:
     enabled: true
     listing_url: "https://english.kyodonews.net/news/japan"
     rss: null
-    link_pattern: "/news/\\d{4}/\\d{2}/[0-9a-f]+"
+    # Проверено на E0: статьи вида /articles/-/84601, по 20 штук на странице.
+    link_pattern: "english\\.kyodonews\\.net/articles/-/\\d+"
     note: "Общая лента Японии. Отбирать только материалы про сумо."
 
 # Исключены осознанно — не возвращать:
