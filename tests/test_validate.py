@@ -36,7 +36,7 @@ def digest() -> dict:
         "body": "Ёкодзуна Хошорю (豊昇龍) не восстановился после операции на колене. " * 2,
         "category": "injury",
         "importance": 5,
-        "sources": [{"name": "Hochi News", "url": URL_A}],
+        "source_ids": ["a001"],
     }
     return {
         "issue_date": "2026-09-10",
@@ -53,21 +53,29 @@ def test_valid_digest_passes(digest, corpus):
     assert validate(digest, corpus)["blocks"]
 
 
-def test_invented_link_is_rejected(digest, corpus):
-    digest["blocks"][0]["sources"] = [
-        {"name": "Hochi News", "url": "https://hochi.news/articles/20260910-OHT1T99999.html"}]
+def test_unknown_article_id_is_rejected(digest, corpus):
+    digest["blocks"][0]["source_ids"] = ["a999"]
     with pytest.raises(ValidationFailed, match="нет во входном корпусе"):
         validate(digest, corpus)
 
 
-def test_link_from_corpus_attributed_to_wrong_publisher_is_rejected(digest, corpus):
-    digest["blocks"][0]["sources"] = [{"name": "Sponichi", "url": URL_A}]
-    assert any("издание не то" in p for p in check_facts(digest, corpus))
+def test_url_is_written_by_code_not_by_the_model(digest, corpus):
+    """Ссылку в выпуск ставит код по идентификатору — выдумать её нельзя."""
+    checked = validate(digest, corpus)
+    assert checked["blocks"][0]["sources"] == [{"name": "Hochi News", "url": URL_A}]
 
 
-def test_date_outside_period_is_rejected(digest, corpus):
-    digest["blocks"][0]["date"] = "2026-08-01"
-    assert any("вне периода" in p for p in check_facts(digest, corpus))
+def test_event_date_may_precede_the_period_but_not_by_a_season(digest, corpus):
+    # Статья вышла сегодня, а тренировка была вчера — это нормально.
+    digest["blocks"][0]["date"] = "2026-09-05"
+    assert not check_facts(digest, corpus)
+    digest["blocks"][0]["date"] = "2026-06-01"
+    assert any("вне окна" in p for p in check_facts(digest, corpus))
+
+
+def test_future_date_is_rejected(digest, corpus):
+    digest["blocks"][0]["date"] = "2026-12-31"
+    assert any("вне окна" in p for p in check_facts(digest, corpus))
 
 
 def test_date_invented_for_a_low_confidence_source_is_rejected(digest):

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from jsonschema import Draft202012Validator
 
 from .models import Corpus
@@ -29,6 +31,11 @@ CATEGORY_RANK = {
 MIN_BLOCKS = 5
 MAX_BLOCKS = 10
 
+# Статья, вышедшая сегодня, описывает вчерашнюю тренировку или позавчерашнее
+# решение Ассоциации, поэтому дата события законно бывает раньше начала периода.
+# Ограничение нужно только против дат из другого сезона.
+DATE_SLACK_DAYS = 7
+
 
 class ValidationFailed(Exception):
     """Выпуск не может быть опубликован. В аргументе — список причин."""
@@ -47,31 +54,32 @@ def check_schema(digest: dict) -> list[str]:
 def check_facts(digest: dict, corpus: Corpus) -> list[str]:
     """Уровень 2: ссылки, издания, даты, объём."""
     problems: list[str] = []
-    by_url = {article.url: article for article in corpus.articles}
+    by_id = {article.id: article for article in corpus.articles}
+    earliest = (date.fromisoformat(digest["period"]["from"])
+                - timedelta(days=DATE_SLACK_DAYS)).isoformat()
 
     for number, block in enumerate(digest.get("blocks", []), start=1):
-        for source in block.get("sources", []):
-            article = by_url.get(source["url"])
+        articles = []
+        for article_id in block.get("source_ids", []):
+            article = by_id.get(article_id)
             if article is None:
                 problems.append(
-                    f"блок {number}: ссылки нет во входном корпусе — {source['url']}")
+                    f"блок {number}: статьи {article_id} нет во входном корпусе")
                 continue
-            if source["name"] != article.source_name:
-                problems.append(
-                    f"блок {number}: издание не то — в выпуске «{source['name']}», "
-                    f"в корпусе «{article.source_name}»")
+            articles.append(article)
 
-        date = block.get("date")
-        if date is None:
+        block_date = block.get("date")
+        if block_date is None:
             continue
-        if not (digest["period"]["from"] <= date <= digest["period"]["to"]):
-            problems.append(f"блок {number}: дата {date} вне периода выпуска")
+        if not earliest <= block_date <= digest["period"]["to"]:
+            problems.append(
+                f"блок {number}: дата {block_date} вне окна {earliest} — "
+                f"{digest['period']['to']}")
         # Если у всех источников блока даты не было, модель не имела права
         # проставить её сама (ТЗ §3.2).
-        articles = [by_url[s["url"]] for s in block.get("sources", []) if s["url"] in by_url]
         if articles and all(a.date_confidence == "low" for a in articles):
             problems.append(
-                f"блок {number}: дата {date} при date_confidence=low у всех источников")
+                f"блок {number}: дата {block_date} при date_confidence=low у всех источников")
 
     count = len(digest.get("blocks", []))
     if not digest.get("quiet_period") and not MIN_BLOCKS <= count <= MAX_BLOCKS:
@@ -98,12 +106,28 @@ def sort_blocks(digest: dict) -> dict:
     return digest
 
 
+def resolve_sources(digest: dict, corpus: Corpus) -> dict:
+    """Подставляет издание и адрес по идентификаторам статей.
+
+    Адреса в выпуск пишет код, а не модель: тогда ссылка на несуществующую
+    статью невозможна не по правилу в промпте, а по устройству.
+    """
+    by_id = {article.id: article for article in corpus.articles}
+    for block in digest.get("blocks", []):
+        block["sources"] = [
+            {"name": by_id[article_id].source_name, "url": by_id[article_id].url}
+            for article_id in block.get("source_ids", [])
+            if article_id in by_id
+        ]
+    return digest
+
+
 def validate(digest: dict, corpus: Corpus) -> dict:
-    """Возвращает выпуск с отсортированными блоками либо падает с причинами."""
+    """Возвращает выпуск с проставленными ссылками и порядком либо падает."""
     problems = check_schema(digest)
     if problems:
         raise ValidationFailed(problems)
     problems = check_facts(digest, corpus)
     if problems:
         raise ValidationFailed(problems)
-    return sort_blocks(digest)
+    return sort_blocks(resolve_sources(digest, corpus))
