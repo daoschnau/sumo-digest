@@ -1,25 +1,29 @@
 name: Сумо-дайджест
 
 on:
-  # ВНИМАНИЕ: расписание намеренно отключено до этапа E5.
-  # Пока пакета sumo_digest нет, прогоны будут падать дважды в неделю.
-  # Включить, раскомментировав блок ниже.
-  #
-  # schedule:
-  #   # 05:00 UTC ≈ 08:00 по Кишинёву летом, 07:00 зимой.
-  #   # Для ежедневного режима заменить на "0 5 * * *".
-  #   - cron: "0 5 * * 1,4"
+  schedule:
+    # 05:00 UTC ≈ 08:00 по Кишинёву летом, 07:00 зимой.
+    - cron: "0 5 * * 1,4"
+    # Догоняющий запуск: расписание Actions под нагрузкой пропускает запуски,
+    # и это не должно стоить читателю выпуска. Если выпуск за сегодня уже есть,
+    # прогон завершится сразу — run.py это проверяет сам.
+    - cron: "0 11 * * 1,4"
   workflow_dispatch:
     inputs:
       period_from:
-        description: "Начало периода (YYYY-MM-DD). Пусто — берётся дата прошлого выпуска."
+        description: "Начало периода (YYYY-MM-DD). Пусто — дата прошлого выпуска."
         required: false
         type: string
+      force:
+        description: "Собрать выпуск, даже если за сегодня он уже есть"
+        required: false
+        default: false
+        type: boolean
       dry_run:
         description: "Прогон без публикации и коммита"
         required: false
-        type: boolean
         default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -33,7 +37,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -46,16 +50,37 @@ jobs:
           pip install uv
           uv sync --frozen
 
-      - name: Сборка выпуска
+      - name: Тесты и линт
+        run: |
+          uv run ruff check .
+          uv run pytest -q
+
+      # Прогон сетевой: обход девяти источников и вызов модели. Упавший прогон
+      # повторяется — день без выпуска хуже, чем лишняя попытка.
+      - name: Выпуск
+        id: digest
+        continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUMO_DIGEST_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: |
           uv run python -m sumo_digest.run \
-            ${{ inputs.period_from && format('--period-from {0}', inputs.period_from) || '' }}
+            ${{ inputs.period_from && format('--period-from {0}', inputs.period_from) || '' }} \
+            ${{ inputs.force && '--force' || '' }}
 
-      # Логи и сырой ответ модели сохраняются всегда — включая падение валидации.
-      # Без этого разбирать неудачный выпуск придётся вслепую.
+      - name: Выпуск, повтор
+        id: retry
+        if: steps.digest.outcome == 'failure'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUMO_DIGEST_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: |
+          uv run python -m sumo_digest.run \
+            ${{ inputs.period_from && format('--period-from {0}', inputs.period_from) || '' }} \
+            ${{ inputs.force && '--force' || '' }}
+
+      # Логи и сырой ответ модели сохраняются всегда, включая провал валидации.
+      # Тексты статей наружу не уходят — только опись корпуса (инвариант 8).
       - name: Артефакты запуска
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,28 +89,33 @@ jobs:
           path: |
             build/digest.raw.json
             build/corpus.meta.json
-            build/run.log
           retention-days: 14
           if-no-files-found: warn
 
       - name: Коммит выпуска и состояния
-        if: success() && inputs.dry_run != true
+        if: steps.digest.outcome == 'success' || steps.retry.outcome == 'success'
         run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then echo "dry run — не коммитим"; exit 0; fi
           git config user.name "sumo-digest-bot"
           git config user.email "actions@github.com"
-          git add site data/state.json data/new_terms.csv
-          git diff --staged --quiet || git commit -m "Выпуск $(date -u +%Y-%m-%d)"
+          git add site data/state.json data/new_terms.csv data/issues
+          git diff --staged --quiet && echo "изменений нет" && exit 0
+          git commit -m "Выпуск $(date -u +%Y-%m-%d)"
           git push
 
-      - name: Upload Pages artifact
-        if: success() && inputs.dry_run != true
+      - name: Сайт артефактом для Pages
+        if: >-
+          vars.PAGES_ENABLED == 'true' && inputs.dry_run != true &&
+          (steps.digest.outcome == 'success' || steps.retry.outcome == 'success')
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
+  # Деплой включается переменной PAGES_ENABLED в настройках репозитория —
+  # до того, как Pages настроены, этот job просто не запускается.
   deploy:
-    if: github.event.inputs.dry_run != 'true'
     needs: build
+    if: vars.PAGES_ENABLED == 'true' && inputs.dry_run != true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
