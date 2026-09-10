@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sumo-digest/schema/digest.schema.json",
+  "title": "Сумо-дайджест — выпуск",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issue_date", "period", "sources_reviewed", "lead", "blocks", "missed", "quiet_period"],
+  "properties": {
+    "issue_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Дата выпуска, ISO 8601"
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string", "format": "date" },
+        "to": { "type": "string", "format": "date" }
+      }
+    },
+    "sources_reviewed": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Основа для строки периода. Заполняется пайплайном, модель только подтверждает использование.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "partial", "failed"],
+            "description": "partial — открылись только заголовки; failed — источник недоступен"
+          },
+          "articles_used": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "lead": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 600,
+      "description": "«Главное» — 2–3 предложения без воды"
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subtitle", "body", "category", "importance", "sources"],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Опускать, если у исходной статьи date_confidence = low. Дату не восстанавливать по догадке."
+          },
+          "place": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Место или контекст события"
+          },
+          "subtitle": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 1600,
+            "description": "2–5 предложений: факт, контекст, что это значит"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["makuuchi_juryo", "banzuke", "injury", "training", "lower_divisions", "other"],
+            "description": "Определяет порядок блоков. Сортировку выполняет код, не модель."
+          },
+          "importance": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "5 — нельзя не знать, 1 — проходное"
+          },
+          "needs_verification": {
+            "type": "boolean",
+            "default": false,
+            "description": "true, если факт основан на единственном непереведённом источнике или содержит спорные цифры/имена"
+          },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Все издания, давшие эту новость. URL обязан присутствовать во входном корпусе.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "url"],
+              "properties": {
+                "name": { "type": "string" },
+                "url": { "type": "string", "format": "uri" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "missed": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "«Мимо кассы» — одной строкой темы, сознательно не вошедшие. Пустая строка допустима."
+    },
+    "new_terms": {
+      "type": "array",
+      "description": "Имена и термины, которых нет в руководстве. В текст выпуска не попадают.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["original", "russian", "status"],
+        "properties": {
+          "original": { "type": "string", "description": "Иероглифы и/или романизация из источника" },
+          "romaji": { "type": "string" },
+          "russian": { "type": "string", "description": "Предложенный вариант или «не определён»" },
+          "status": { "type": "string", "enum": ["требует проверки"] }
+        }
+      }
+    },
+    "quiet_period": {
+      "type": "boolean",
+      "description": "true — межсезонье или мало материала; снимает требование 5–10 блоков"
+    }
+  }
+}

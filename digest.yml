@@ -1,0 +1,95 @@
+name: Сумо-дайджест
+
+on:
+  # ВНИМАНИЕ: расписание намеренно отключено до этапа E5.
+  # Пока пакета sumo_digest нет, прогоны будут падать дважды в неделю.
+  # Включить, раскомментировав блок ниже.
+  #
+  # schedule:
+  #   # 05:00 UTC ≈ 08:00 по Кишинёву летом, 07:00 зимой.
+  #   # Для ежедневного режима заменить на "0 5 * * *".
+  #   - cron: "0 5 * * 1,4"
+  workflow_dispatch:
+    inputs:
+      period_from:
+        description: "Начало периода (YYYY-MM-DD). Пусто — берётся дата прошлого выпуска."
+        required: false
+        type: string
+      dry_run:
+        description: "Прогон без публикации и коммита"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sumo-digest
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установка зависимостей
+        run: |
+          pip install uv
+          uv sync --frozen
+
+      - name: Сборка выпуска
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUMO_DIGEST_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: |
+          uv run python -m sumo_digest.run \
+            ${{ inputs.period_from && format('--period-from {0}', inputs.period_from) || '' }}
+
+      # Логи и сырой ответ модели сохраняются всегда — включая падение валидации.
+      # Без этого разбирать неудачный выпуск придётся вслепую.
+      - name: Артефакты запуска
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-${{ github.run_id }}
+          path: |
+            build/digest.raw.json
+            build/corpus.json
+            build/run.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Коммит выпуска и состояния
+        if: success() && inputs.dry_run != true
+        run: |
+          git config user.name "sumo-digest-bot"
+          git config user.email "actions@github.com"
+          git add site data/state.json data/new_terms.csv
+          git diff --staged --quiet || git commit -m "Выпуск $(date -u +%Y-%m-%d)"
+          git push
+
+      - name: Upload Pages artifact
+        if: success() && inputs.dry_run != true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event.inputs.dry_run != 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

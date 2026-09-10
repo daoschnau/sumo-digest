@@ -1,0 +1,21 @@
+# Артефакты прогона — не коммитятся, забираются из Actions
+build/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Секреты
+.env
+.env.*
+!.env.example
+
+# Локальный кеш загруженных страниц (если появится)
+.cache/
+
+# ОС
+.DS_Store

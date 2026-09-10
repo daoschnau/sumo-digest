@@ -1,0 +1,109 @@
+# Закрытый список источников. Добавление новых — только осознанным решением,
+# а не «на всякий случай». Asahi, Nikkei, Yomiuri исключены навсегда (см. спецификацию §1).
+#
+# link_pattern — регулярка, которой должна соответствовать ссылка со страницы листинга,
+# чтобы считаться статьёй. Значения ниже — ПРЕДПОЛОЖИТЕЛЬНЫЕ: каждое проверить
+# на этапе E0 скриптом scripts/check_sources.py и поправить по факту.
+#
+# rss — заполнить, если у источника найдётся фид: он стабильнее разбора HTML.
+
+defaults:
+  timeout_seconds: 15
+  user_agent: "sumo-digest/1.0 (+https://github.com/USER/sumo-digest)"
+  max_links_per_source: 15
+
+budget:
+  max_articles: 12          # верхняя граница корпуса, подаваемого модели
+  min_articles_for_issue: 1 # меньше — выпуск помечается quiet_period
+
+sources:
+  - id: sponichi
+    name: Sponichi
+    priority: 1
+    lang: ja
+    enabled: true
+    listing_url: "https://www.sponichi.co.jp/sports/tokusyu/sumou/"
+    rss: null
+    link_pattern: "/sports/news/\\d{4}/\\d{2}/\\d{2}/.+"
+    note: "Ключевой источник фактуры. Обходить всегда, недоступность не понижает приоритет."
+
+  - id: hochi
+    name: Hochi News
+    priority: 1
+    lang: ja
+    enabled: true
+    listing_url: "https://hochi.news/tag/%E5%A4%A7%E7%9B%B8%E6%92%B2"
+    rss: null
+    link_pattern: "https://hochi\\.news/articles/\\d+\\.html"
+    note: "Ключевой источник фактуры. Обходить всегда."
+
+  - id: nikkansports
+    name: Nikkan Sports
+    priority: 2
+    lang: ja
+    enabled: true
+    listing_url: "https://www.nikkansports.com/battle/sumo/"
+    rss: null
+    link_pattern: "/battle/sumo/news/\\d+\\.html"
+
+  - id: sanspo
+    name: Sanspo
+    priority: 2
+    lang: ja
+    enabled: true
+    listing_url: "https://www.sanspo.com/sports/sumo/"
+    rss: null
+    link_pattern: "/article/\\d{8}-[A-Z0-9]+/"
+
+  - id: nhk
+    name: NHK
+    priority: 3
+    lang: ja
+    enabled: true
+    listing_url: "https://www3.nhk.or.jp/news/word/0000003.html"
+    rss: null
+    link_pattern: "/news/html/\\d+/k\\d+\\.html"
+
+  - id: sankei
+    name: Sankei
+    priority: 3
+    lang: ja
+    enabled: true
+    listing_url: "https://www.sankei.com/sports/martialarts/"
+    rss: null
+    link_pattern: "/article/\\d{8}-[A-Z0-9]+/"
+    note: "Рубрика — единоборства целиком, не только сумо. Фильтровать по содержанию."
+
+  - id: dmenu
+    name: dメニュー
+    priority: 3
+    lang: ja
+    enabled: true
+    listing_url: "https://sumo.sports.smt.docomo.ne.jp/news/"
+    rss: null
+    link_pattern: "/news/\\d+"
+
+  - id: chunichi
+    name: Chunichi Sports
+    priority: 3
+    lang: ja
+    enabled: true
+    listing_url: "https://www.chunichi.co.jp/chuspo/generalsports/sumo"
+    rss: null
+    link_pattern: "/article/\\d+"
+
+  - id: kyodo
+    name: Kyodo News
+    priority: 3
+    lang: en
+    enabled: true
+    listing_url: "https://english.kyodonews.net/news/japan"
+    rss: null
+    link_pattern: "/news/\\d{4}/\\d{2}/[0-9a-f]+"
+    note: "Общая лента Японии. Отбирать только материалы про сумо."
+
+# Исключены осознанно — не возвращать:
+#   asahi, nikkei          — стабильные таймауты
+#   yomiuri japan news     — не использовался
+#   sumo db, glossary      — справочники, не новости
+#   личный блог рикиши     — не новостной источник
