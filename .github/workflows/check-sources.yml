@@ -14,6 +14,11 @@ on:
         required: false
         default: "5"
         type: string
+      dump:
+        description: "Печатать все совпавшие ссылки"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   check:
@@ -34,4 +39,4 @@ jobs:
       - name: Обход листингов
         run: |
           uv run python scripts/check_sources.py \
-            --show "${{ inputs.show }}" ${{ inputs.sources }}
+            --show "${{ inputs.show }}" ${{ inputs.dump && '--dump' || '' }} ${{ inputs.sources }}

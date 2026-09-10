@@ -109,6 +109,19 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     if len(matched) > show:
         print(f"      … ещё {len(matched) - show}")
 
+    if not matched:
+        # Подбирать link_pattern вслепую невозможно — показываем, как ссылки
+        # на этой странице выглядят на самом деле.
+        host = urlsplit(str(response.url)).netloc
+        samples: dict[str, None] = {}
+        for href in parser.hrefs:
+            absolute = normalize(urljoin(str(response.url), href))
+            if urlsplit(absolute).netloc == host:
+                samples.setdefault(absolute, None)
+        print(f"    примеры ссылок этого хоста ({len(samples)} уникальных):")
+        for link in list(samples)[:15]:
+            print(f"      {link}")
+
     if parser.feeds:
         print("    RSS/Atom на странице:")
         for feed in dict.fromkeys(parser.feeds):
@@ -132,6 +145,8 @@ def main() -> int:
     arguments.add_argument("sources", nargs="*", help="id источников; пусто — все включённые")
     arguments.add_argument("--show", type=int, default=5,
                            help="сколько ссылок печатать (по умолчанию 5)")
+    arguments.add_argument("--dump", action="store_true",
+                           help="печатать все совпавшие ссылки, а не первые --show")
     options = arguments.parse_args()
 
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
@@ -146,7 +161,7 @@ def main() -> int:
 
     results: list[tuple[str, str, int]] = []
     for source in sorted(selected, key=lambda s: s["priority"]):
-        status, count = check(source, defaults, options.show)
+        status, count = check(source, defaults, 10_000 if options.dump else options.show)
         results.append((source["id"], status, count))
 
     print("\n" + "=" * 60)
