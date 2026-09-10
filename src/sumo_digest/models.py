@@ -63,3 +63,13 @@ class Corpus:
             "articles": [a.as_dict() for a in self.articles],
             "sources": [s.as_dict() for s in self.sources],
         }
+
+
+def corpus_from_dict(raw: dict) -> Corpus:
+    """Обратная сборка корпуса из build/corpus.json."""
+    return Corpus(
+        period_from=raw["period"]["from"],
+        period_to=raw["period"]["to"],
+        articles=[Article(**item) for item in raw["articles"]],
+        sources=[SourceStatus(**item) for item in raw["sources"]],
+    )

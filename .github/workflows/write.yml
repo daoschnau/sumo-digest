@@ -1,0 +1,56 @@
+name: Пробный выпуск
+
+# Ручной прогон E2: собрать корпус, отдать модели, проверить выпуск.
+# Тратит деньги на API, поэтому только по кнопке и без расписания.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Модель для шага write"
+        required: false
+        default: "claude-opus-5"
+        type: string
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установка зависимостей
+        run: |
+          pip install uv
+          uv sync --frozen
+
+      - name: Тесты и линт
+        run: |
+          uv run ruff check .
+          uv run pytest -q
+
+      - name: Сбор корпуса
+        run: uv run python -m sumo_digest.collect --dry-run
+
+      - name: Выпуск
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUMO_DIGEST_MODEL: ${{ inputs.model }}
+        run: uv run python -m sumo_digest.llm
+
+      # Сырой ответ модели нужен именно при провале валидации: без него
+      # разбирать неудачный выпуск придётся вслепую.
+      - name: Артефакты
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ github.run_id }}
+          path: |
+            build/corpus.json
+            build/digest.raw.json
+            build/digest.json
+          retention-days: 14
+          if-no-files-found: warn
