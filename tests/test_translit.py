@@ -162,3 +162,35 @@ def test_correct_name_is_not_broken_by_the_rule_that_fixes_it(rules):
     fixed, report = lint_text("Вакатакакаге снялся с турнира.", rules)
     assert fixed == "Вакатакакаге снялся с турнира."
     assert not report.fixes
+
+
+@pytest.mark.parametrize("text", [
+    "Макуутский Вакатакакаге снялся с турнира.",
+    "Схватка с макуутским Чиёшомой прошла ровно.",
+    "Дзюрёвский дебютант выиграл.",
+    "Бандзукское решение объявили в понедельник.",
+])
+def test_terms_turned_into_adjectives_are_flagged(text, rules):
+    """«Макуутский Икс» — это не по-русски и не по спецификации."""
+    _, report = lint_text(text, rules)
+    assert any(problem.rule == "term_as_adjective" for problem in report.problems)
+
+
+@pytest.mark.parametrize("text", [
+    "Вакатакакаге из макуути снялся с турнира.",
+    "Схватка с маегаширой Хирадоуми прошла ровно.",
+    "Киришима готовится к заявке на ёкодзунское звание.",
+    "Озеки Оносато провёл тренировку в Сакаигава-бея.",
+])
+def test_correct_noun_forms_pass(text, rules):
+    """Единственное устоявшееся исключение — «ёкодзунское звание»."""
+    _, report = lint_text(text, rules)
+    assert not report.problems
+
+
+def test_adjective_is_not_autofixed_but_handed_to_the_repair_pass(rules):
+    """Порядок слов заменой не чинится — правит модель, выпуск при этом выходит."""
+    fixed, report = lint_text("Макуутский Вакатакакаге снялся.", rules)
+    assert fixed == "Макуутский Вакатакакаге снялся."
+    assert not report.fixes
+    assert report.problems
