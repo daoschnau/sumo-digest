@@ -172,3 +172,25 @@ def test_relint_reorders_an_archive_written_under_the_old_rule(tmp_path):
 
     fixed = json.loads((archive / "2026-09-10.json").read_text(encoding="utf-8"))
     assert fixed["blocks"][0]["importance"] == 5
+
+
+def test_custom_domain_gets_a_cname_file(tmp_path):
+    render_site([issue("2026-09-10", "Главное за период.")], tmp_path,
+                base_url="https://sumodigest.online/")
+    assert (tmp_path / "CNAME").read_text(encoding="utf-8").strip() == "sumodigest.online"
+
+
+def test_github_io_address_does_not_get_a_cname_file(tmp_path):
+    """CNAME с github.io ломает Pages: домен обязан быть собственным."""
+    render_site([issue("2026-09-10", "Главное за период.")], tmp_path,
+                base_url="https://daoschnau.github.io/sumo-digest/")
+    assert not (tmp_path / "CNAME").exists()
+
+
+def test_feed_links_point_at_the_custom_domain(tmp_path):
+    import xml.etree.ElementTree as ET
+
+    render_site([issue("2026-09-10", "Главное за период.")], tmp_path,
+                base_url="https://sumodigest.online/")
+    entry = ET.parse(tmp_path / "feed.xml").getroot().find("a:entry", ATOM)
+    assert entry.find("a:id", ATOM).text == "https://sumodigest.online/2026-09-10/"

@@ -14,6 +14,7 @@ import shutil
 from datetime import UTC, date, datetime
 from html import escape
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -24,7 +25,7 @@ TEMPLATES = Path("templates")
 ISSUES = Path("data/issues")
 SITE = Path("site")
 
-DEFAULT_BASE_URL = "https://daoschnau.github.io/sumo-digest/"
+DEFAULT_BASE_URL = "https://sumodigest.online/"
 
 MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня",
           "июля", "августа", "сентября", "октября", "ноября", "декабря")
@@ -115,6 +116,13 @@ def render_site(issues: list[dict], out_dir: Path = SITE,
     # Иначе GitHub Pages прогонит сайт через Jekyll и выбросит всё,
     # что начинается с подчёркивания.
     (out_dir / ".nojekyll").write_text("", encoding="utf-8")
+
+    # Собственный домен. Настройка живёт и в Settings → Pages, но site/
+    # пересобирается каждый прогон, и пусть домен лежит в коде тоже.
+    domain = urlsplit(base_url).netloc
+    if domain and not domain.endswith("github.io"):
+        (out_dir / "CNAME").write_text(domain + "\n", encoding="utf-8")
+        written.append(out_dir / "CNAME")
 
     return written
 
