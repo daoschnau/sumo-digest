@@ -30,6 +30,13 @@ import yaml
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "sources.yml"
 MIN_LINKS = 5  # критерий готовности E0 из ROADMAP.md
 
+# Часть листингов отрисовывается скриптом, и в разметке нет ни одного <a> на статью:
+# адреса лежат в JSON внутри страницы. Эти две регулярки достают их оттуда.
+# Site-specific селекторов по-прежнему нет — только поиск URL в тексте.
+ABSOLUTE_URL = re.compile(r"https?://[^\s\"'<>\\)]{8,}")
+QUOTED_PATH = re.compile(r"[\"'](/[^\"'\s<>\\]{3,})[\"']")
+FEEDISH = re.compile(r"(rss|atom|feed|\.xml)", re.IGNORECASE)
+
 
 class PageLinks(HTMLParser):
     """Собирает href всех <a> и адреса RSS/Atom из <link rel=alternate>."""
@@ -96,14 +103,26 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     parser = PageLinks()
     parser.feed(response.text)
 
-    seen: dict[str, None] = {}
-    for href in parser.hrefs:
-        absolute = normalize(urljoin(str(response.url), href))
-        if pattern.search(absolute):
-            seen.setdefault(absolute, None)
-    matched = list(seen)
+    def candidates(raw_links) -> dict[str, None]:
+        found: dict[str, None] = {}
+        for raw in raw_links:
+            absolute = normalize(urljoin(str(response.url), raw))
+            if pattern.search(absolute):
+                found.setdefault(absolute, None)
+        return found
 
-    print(f"    ссылок на странице: {len(parser.hrefs)}, подошло под link_pattern: {len(matched)}")
+    from_anchors = candidates(parser.hrefs)
+    embedded = candidates(ABSOLUTE_URL.findall(response.text)
+                          + QUOTED_PATH.findall(response.text))
+    seen = dict(from_anchors)
+    for link in embedded:
+        seen.setdefault(link, None)
+    matched = list(seen)
+    only_embedded = len(matched) - len(from_anchors)
+
+    note = f" (из них {only_embedded} только в тексте, не в <a>)" if only_embedded else ""
+    print(f"    ссылок на странице: {len(parser.hrefs)},"
+          f" подошло под link_pattern: {len(matched)}{note}")
     for link in matched[:show]:
         print(f"      {link}")
     if len(matched) > show:
@@ -128,6 +147,13 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
             print(f"      {urljoin(str(response.url), feed)}")
     else:
         print("    RSS/Atom: не объявлен")
+
+    feed_links = {normalize(urljoin(str(response.url), href)) for href in parser.hrefs
+                  if FEEDISH.search(href)}
+    if feed_links:
+        print("    похожие на фид ссылки со страницы:")
+        for link in sorted(feed_links)[:5]:
+            print(f"      {link}")
 
     allowed = robots_allows(url, user_agent, timeout)
     verdict = {True: "разрешает", False: "ЗАПРЕЩАЕТ", None: "нет данных"}[allowed]
