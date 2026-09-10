@@ -119,3 +119,15 @@ def test_api_schema_drops_what_structured_outputs_rejects():
     # Ограничения остаются в полной схеме — иначе валидация станет фикцией.
     assert "minLength" in str(load_schema())
     assert stripped["additionalProperties"] is False
+
+
+def test_corpus_manifest_carries_no_article_text(corpus):
+    """Тексты чужих статей не покидают прогон: в артефакт уходит только опись."""
+    meta = corpus.as_meta_dict()
+    dumped = str(meta)
+    assert "本文" not in dumped
+    assert all("text" not in article for article in meta["articles"])
+    assert meta["articles"][0]["text_length"] > 0
+    assert meta["articles"][0]["url"].startswith("https://")
+    # Полный корпус тексты по-прежнему несёт: он нужен модели внутри прогона.
+    assert corpus.as_dict()["articles"][0]["text"]

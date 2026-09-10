@@ -67,7 +67,7 @@ jobs:
         with:
           name: digest-${{ github.run_id }}
           path: |
-            build/corpus.json
+            build/corpus.meta.json
             build/digest.raw.json
             build/digest.json
           retention-days: 14

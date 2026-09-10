@@ -63,7 +63,7 @@ jobs:
           name: run-${{ github.run_id }}
           path: |
             build/digest.raw.json
-            build/corpus.json
+            build/corpus.meta.json
             build/run.log
           retention-days: 14
           if-no-files-found: warn

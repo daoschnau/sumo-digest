@@ -64,6 +64,32 @@ class Corpus:
             "sources": [s.as_dict() for s in self.sources],
         }
 
+    def as_meta_dict(self) -> dict:
+        """То же самое без текстов статей — для логов и артефактов.
+
+        Полные тексты чужих новостных материалов не должны покидать прогон:
+        цитировать факт со ссылкой на первоисточник — одно, раздавать копию
+        статьи — другое. Для разбора неудачного выпуска хватает того, что
+        попало на вход: издание, адрес, дата, заголовок, объём.
+        """
+        return {
+            "period": {"from": self.period_from, "to": self.period_to},
+            "articles": [
+                {
+                    "id": a.id,
+                    "source_id": a.source_id,
+                    "source_name": a.source_name,
+                    "url": a.url,
+                    "published": a.published,
+                    "date_confidence": a.date_confidence,
+                    "title": a.title,
+                    "text_length": len(a.text),
+                }
+                for a in self.articles
+            ],
+            "sources": [s.as_dict() for s in self.sources],
+        }
+
 
 def corpus_from_dict(raw: dict) -> Corpus:
     """Обратная сборка корпуса из build/corpus.json."""

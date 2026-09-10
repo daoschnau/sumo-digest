@@ -146,7 +146,14 @@ def main() -> int:
     options.out.parent.mkdir(parents=True, exist_ok=True)
     options.out.write_text(json.dumps(corpus.as_dict(), ensure_ascii=False, indent=2) + "\n",
                            encoding="utf-8")
-    print(f"\nкорпус записан: {options.out}")
+
+    # Тексты статей живут только внутри прогона. Наружу — в артефакты, логи
+    # и тем более в репозиторий — уходит опись: ссылки, даты, заголовки, объём.
+    meta_path = options.out.with_name(options.out.stem + ".meta.json")
+    meta_path.write_text(json.dumps(corpus.as_meta_dict(), ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8")
+    print(f"\nкорпус записан: {options.out} (тексты, только для этого прогона)")
+    print(f"опись корпуса:  {meta_path} (без текстов, её и забираем артефактом)")
 
     if not corpus.articles:
         # Пустой корпус — это не выпуск. Публиковать пустую страницу нельзя (ТЗ §7).
