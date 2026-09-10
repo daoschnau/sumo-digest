@@ -30,19 +30,38 @@ MIN_NAME_LENGTH = 6
 
 
 @dataclass
+class LintProblem:
+    """Нарушение, которое нельзя починить заменой. Публикацию не блокирует."""
+
+    where: str          # путь к полю выпуска: lead, blocks[2].body
+    rule: str
+    message: str
+    sample: str
+
+    def __str__(self) -> str:
+        return f"{self.where}: {self.rule} — {self.message} Найдено: «{self.sample}»"
+
+
+@dataclass
 class LintReport:
     fixes: list[tuple[str, str, int]] = field(default_factory=list)
-    rejects: list[str] = field(default_factory=list)
+    problems: list[LintProblem] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def merge(self, other: LintReport) -> None:
         self.fixes.extend(other.fixes)
-        self.rejects.extend(other.rejects)
+        self.problems.extend(other.problems)
         self.warnings.extend(other.warnings)
 
     @property
     def clean(self) -> bool:
-        return not self.rejects
+        return not self.problems
+
+    def by_field(self) -> dict[str, list[LintProblem]]:
+        grouped: dict[str, list[LintProblem]] = {}
+        for problem in self.problems:
+            grouped.setdefault(problem.where, []).append(problem)
+        return grouped
 
 
 def load_rules(path: Path = RULES_PATH) -> dict:
@@ -73,15 +92,21 @@ def autofix(text: str, rules: dict) -> tuple[str, list[tuple[str, str, int]]]:
     return text, applied
 
 
-def rejections(text: str, rules: dict) -> list[str]:
-    """Ошибки, которые нельзя чинить автоматически: выпуск не публикуется."""
-    problems: list[str] = []
+def rejections(text: str, rules: dict, where: str = "") -> list[LintProblem]:
+    """Ошибки, которые нельзя починить заменой: нужна правка формулировки.
+
+    Публикацию они не останавливают. Макрон в имени не делает выпуск ложным,
+    а отменённый из-за макрона выпуск — это ноль выпуска вместо почти верного.
+    Жёсткий отказ остаётся только на уровнях 1 и 2, где ломаются факты.
+    """
+    problems: list[LintProblem] = []
     for rule in rules.get("reject", []):
         checked = ROMAJI_NOTE.sub("", text) if rule.get("allow_if_in_parens") else text
         found = re.findall(rule["pattern"], checked)
         if found:
             sample = found[0] if isinstance(found[0], str) else found[0][0]
-            problems.append(f"{rule['id']}: {rule['message']} Найдено: «{sample}»")
+            problems.append(LintProblem(where=where, rule=rule["id"],
+                                        message=rule["message"], sample=sample))
     return problems
 
 
@@ -108,10 +133,10 @@ def warnings(text: str, rules: dict) -> list[str]:
     return notes
 
 
-def lint_text(text: str, rules: dict) -> tuple[str, LintReport]:
+def lint_text(text: str, rules: dict, where: str = "") -> tuple[str, LintReport]:
     fixed, applied = autofix(text, rules)
     return fixed, LintReport(fixes=applied,
-                             rejects=rejections(fixed, rules),
+                             problems=rejections(fixed, rules, where),
                              warnings=warnings(fixed, rules))
 
 
@@ -127,16 +152,32 @@ def lint_digest(digest: dict, rules: dict | None = None) -> tuple[dict, LintRepo
 
     for field_name in TEXT_FIELDS:
         if isinstance(digest.get(field_name), str):
-            digest[field_name], one = lint_text(digest[field_name], rules)
+            digest[field_name], one = lint_text(digest[field_name], rules, field_name)
             report.merge(one)
 
-    for number, block in enumerate(digest.get("blocks", []), start=1):
+    for number, block in enumerate(digest.get("blocks", [])):
         for field_name in BLOCK_FIELDS:
             if not isinstance(block.get(field_name), str):
                 continue
-            block[field_name], one = lint_text(block[field_name], rules)
-            one.rejects = [f"блок {number}, {field_name}: {r}" for r in one.rejects]
-            one.warnings = [f"блок {number}, {field_name}: {w}" for w in one.warnings]
+            where = f"blocks[{number}].{field_name}"
+            block[field_name], one = lint_text(block[field_name], rules, where)
+            one.warnings = [f"{where}: {w}" for w in one.warnings]
             report.merge(one)
 
     return digest, report
+
+
+def read_field(digest: dict, where: str) -> str:
+    """Читает поле выпуска по пути вида blocks[2].body."""
+    if "." not in where:
+        return digest[where]
+    index, field_name = where.split("].")
+    return digest["blocks"][int(index.removeprefix("blocks["))][field_name]
+
+
+def write_field(digest: dict, where: str, value: str) -> None:
+    if "." not in where:
+        digest[where] = value
+        return
+    index, field_name = where.split("].")
+    digest["blocks"][int(index.removeprefix("blocks["))][field_name] = value

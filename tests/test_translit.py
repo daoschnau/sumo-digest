@@ -3,8 +3,15 @@
 import pytest
 
 from sumo_digest.models import Article, Corpus
-from sumo_digest.translit import distance, lint_digest, lint_text, load_rules
-from sumo_digest.validate import ValidationFailed, validate
+from sumo_digest.translit import (
+    distance,
+    lint_digest,
+    lint_text,
+    load_rules,
+    read_field,
+    write_field,
+)
+from sumo_digest.validate import validate
 
 
 @pytest.fixture(scope="module")
@@ -57,28 +64,28 @@ def test_every_fix_is_logged(rules):
 
 def test_latin_inside_a_cyrillic_name_is_rejected(rules):
     _, report = lint_text("Борец Хошорюsan вышел на дохё.", rules)
-    assert any("latin_inside_cyrillic" in problem for problem in report.rejects)
+    assert any(problem.rule == "latin_inside_cyrillic" for problem in report.problems)
 
 
 def test_the_romaji_note_from_the_spec_is_allowed(rules):
     _, report = lint_text("Имя (romaji: Kotonofuji — требует проверки) уточняется.", rules)
-    assert not report.rejects
+    assert not report.problems
 
 
 def test_macron_and_stress_marks_are_rejected(rules):
-    assert lint_text("Ōnosato вышел", rules)[1].rejects
-    assert lint_text("Хана́да провёл", rules)[1].rejects
+    assert lint_text("Ōnosato вышел", rules)[1].problems
+    assert lint_text("Хана́да провёл", rules)[1].problems
 
 
 def test_hepburn_left_in_latin_is_rejected(rules):
     _, report = lint_text("Титул yokozuna остался за ним.", rules)
-    assert any("stable_hepburn_leak" in problem for problem in report.rejects)
+    assert any(problem.rule == "stable_hepburn_leak" for problem in report.problems)
 
 
 def test_near_canonical_name_only_warns(rules):
     _, report = lint_text("Борец Хошору вышел на дохё.", rules)
     assert any("похоже на опечатку" in note for note in report.warnings)
-    assert not report.rejects  # предупреждение публикацию не блокирует
+    assert not report.problems  # предупреждение публикацию не блокирует
 
 
 def test_correct_text_produces_nothing(rules):
@@ -86,7 +93,7 @@ def test_correct_text_produces_nothing(rules):
             "ояката оценил состояние подопечного, бандзуке уже вышло.")
     fixed, report = lint_text(text, rules)
     assert fixed == text
-    assert not report.fixes and not report.rejects and not report.warnings
+    assert not report.fixes and not report.problems and not report.warnings
 
 
 def test_digest_is_fixed_field_by_field(rules):
@@ -102,8 +109,8 @@ def test_digest_is_fixed_field_by_field(rules):
     assert len(report.fixes) >= 3
 
 
-def test_rejection_stops_the_whole_issue():
-    """Уровень 3 обязан ронять выпуск целиком, а не помечать блок."""
+def test_transliteration_problem_does_not_kill_the_issue():
+    """Написание — не факты. Выпуск без дайджеста хуже дайджеста с огрехом."""
     corpus = Corpus(period_from="2026-09-07", period_to="2026-09-10", articles=[
         Article(id="a001", source_id="hochi", source_name="Hochi News",
                 url="https://hochi.news/articles/20260910-OHT1T51188.html",
@@ -118,11 +125,30 @@ def test_rejection_stops_the_whole_issue():
         "missed": "",
         "quiet_period": True,
     }
-    with pytest.raises(ValidationFailed, match="stable_hepburn_leak"):
-        validate(digest, corpus)
+    checked, report = validate(digest, corpus)
+    assert checked["blocks"], "выпуск обязан дойти до публикации"
+    assert any(problem.rule == "stable_hepburn_leak" for problem in report.problems)
+    assert not report.clean, "замечание обязано остаться видимым в отчёте"
 
 
 def test_distance_is_a_real_edit_distance():
     assert distance("Хошорю", "Хошорю") == 0
     assert distance("Хошору", "Хошорю") == 1
     assert distance("", "Охо") == 3
+
+
+def test_problem_points_at_the_field_it_came_from(rules):
+    digest = {"lead": "Всё в порядке.",
+              "blocks": [{"subtitle": "Заголовок", "body": "Титул yokozuna остался."}]}
+    _, report = lint_digest(digest, rules)
+    assert [p.where for p in report.problems] == ["blocks[0].body"]
+    assert list(report.by_field()) == ["blocks[0].body"]
+
+
+def test_field_path_round_trips(rules):
+    digest = {"lead": "текст", "blocks": [{"body": "было"}, {"body": "тоже было"}]}
+    assert read_field(digest, "blocks[1].body") == "тоже было"
+    write_field(digest, "blocks[1].body", "стало")
+    assert digest["blocks"][1]["body"] == "стало"
+    write_field(digest, "lead", "новое")
+    assert read_field(digest, "lead") == "новое"

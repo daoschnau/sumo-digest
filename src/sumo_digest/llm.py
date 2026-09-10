@@ -18,6 +18,7 @@ import anthropic
 
 from .models import Corpus, corpus_from_dict
 from .schema import api_schema, load_schema
+from .translit import LintReport, lint_digest, read_field, write_field
 from .validate import ValidationFailed, validate
 
 WRITE_PROMPT = Path("prompts/write.md")
@@ -101,6 +102,57 @@ def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL) -> tuple[dict, dict
     return json.loads(text), usage
 
 
+REPAIR_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["corrected"],
+    "properties": {"corrected": {"type": "string"}},
+}
+
+
+def repair_field(text: str, complaints: list[str], model: str) -> str:
+    """Одна попытка исправить написание в конкретном фрагменте выпуска.
+
+    Находит проблему по-прежнему код: модель получает готовый список нарушений
+    и правит только написание. Факты, порядок и длина остаются её же.
+    """
+    client = anthropic.Anthropic()
+    listed = "\n".join(f"- {complaint}" for complaint in complaints)
+    response = client.messages.create(
+        model=model,
+        max_tokens=4000,
+        system=[
+            {"type": "text",
+             "text": ("Ты правишь написание в готовом фрагменте «Сумо-дайджеста». "
+                      "Меняй только то, на что указано: транслитерацию, латиницу, "
+                      "диакритику. Факты, цифры, имена людей и длину текста "
+                      "не трогай. Верни исправленный фрагмент целиком.")},
+            {"type": "text", "text": TRANSLIT_GUIDE.read_text(encoding="utf-8")},
+        ],
+        messages=[{"role": "user",
+                   "content": f"Фрагмент:\n{text}\n\nНарушения:\n{listed}"}],
+        output_config={"format": {"type": "json_schema", "schema": REPAIR_SCHEMA}},
+    )
+    answer = next(block.text for block in response.content if block.type == "text")
+    return json.loads(answer)["corrected"]
+
+
+def repair_transliteration(digest: dict, report: LintReport,
+                           model: str) -> tuple[dict, LintReport]:
+    """Чинит поля с замечаниями и перепроверяет их линтером."""
+    for where, problems in report.by_field().items():
+        original = read_field(digest, where)
+        try:
+            fixed = repair_field(original, [str(p) for p in problems], model)
+        except anthropic.APIError as error:
+            print(f"  правка {where} не удалась: {error}", file=sys.stderr)
+            continue
+        if fixed.strip():
+            write_field(digest, where, fixed.strip())
+
+    return lint_digest(digest)
+
+
 def main() -> int:
     arguments = argparse.ArgumentParser(description="Выпуск из корпуса статей")
     arguments.add_argument("--corpus", type=Path, default=Path("build/corpus.json"))
@@ -134,6 +186,20 @@ def main() -> int:
 
     options.out.write_text(json.dumps(digest, ensure_ascii=False, indent=2) + "\n",
                            encoding="utf-8")
+
+    if lint.problems:
+        print("\nтранслитерация, требует правки:")
+        for problem in lint.problems:
+            print(f"  {problem}")
+        digest, lint = repair_transliteration(digest, lint, options.model)
+        if lint.problems:
+            # Выпуск всё равно выходит: это написание, а не факты. Оставшееся
+            # видно в логе прогона и чинится правилом в config/translit_rules.yml.
+            print("\nпосле правки осталось (выпуск публикуется):")
+            for problem in lint.problems:
+                print(f"  {problem}")
+        else:
+            print("  после правки замечаний нет")
 
     # Сработавшие правила линтера — важнейшая часть лога: по ним видно,
     # на каких именах модель дрейфует от выпуска к выпуску.

@@ -126,6 +126,9 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
 
     Порядок важен: схема — прежде чем ходить по полям, ссылки — прежде чем
     тратить время на текст, и только потом транслитерация, которая текст меняет.
+
+    Падают только уровни 1 и 2: там ломаются факты, и такой выпуск публиковать
+    нельзя. Уровень 3 возвращает замечания отчётом.
     """
     problems = check_schema(digest)
     if problems:
@@ -134,8 +137,9 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     if problems:
         raise ValidationFailed(problems)
 
+    # Уровень 3 публикацию не останавливает: он про написание, а не про факты.
+    # Что делать с оставшимися замечаниями, решает вызывающий — обычно одна
+    # попытка правки текста и публикация с записью в лог.
     digest, report = lint_digest(digest)
-    if report.rejects:
-        raise ValidationFailed(report.rejects)
 
     return sort_blocks(resolve_sources(digest, corpus)), report
