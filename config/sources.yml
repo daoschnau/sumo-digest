@@ -9,7 +9,7 @@
 
 defaults:
   timeout_seconds: 15
-  user_agent: "sumo-digest/1.0 (+https://github.com/USER/sumo-digest)"
+  user_agent: "sumo-digest/1.0 (+https://github.com/daoschnau/sumo-digest)"
   max_links_per_source: 15
 
 budget:
