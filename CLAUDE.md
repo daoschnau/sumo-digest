@@ -67,6 +67,7 @@ src/sumo_digest/           collect, extract, llm, validate, render, state, run
 templates/                 issue.html, index.html, atom.xml
 data/state.json            дата прошлого выпуска + seen_urls
 data/new_terms.csv         накопитель новых транслитераций
+data/issues/*.json         архив выпусков; сайт пересобирается из него целиком
 site/                      результат рендеринга (GitHub Pages)
 ```
 

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сумо-дайджест — {{ issue.issue_date | day }}</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="alternate" type="application/atom+xml" title="Сумо-дайджест" href="../feed.xml">
+<main>
+  <h1>🥋 Сумо-дайджест — {{ issue.issue_date | day }}</h1>
+
+  <p class="period">
+    {{ issue.period.from | day }}–{{ issue.period.to | day }} · просмотрено
+    {{ issue.sources_reviewed | length }} источников{% if unavailable %};
+    не открылись: {{ unavailable | join(', ') }}{% endif %}.
+  </p>
+
+  <p class="lead">{{ issue.lead }}</p>
+
+  {% for block in issue.blocks %}
+  <section class="block">
+    <h2>{{ block.subtitle }}</h2>
+    <p class="block-date">
+      {%- if block.date %}{{ block.date | day }}{% endif -%}
+      {%- if block.date and block.place %} · {% endif -%}
+      {%- if block.place %}{{ block.place }}{% endif -%}
+    </p>
+    <p>{{ block.body }}</p>
+    <p class="sources">
+      Источники:
+      {% for source in block.sources -%}
+      <a href="{{ source.url }}" rel="nofollow noopener">{{ source.name }}</a>
+      {%- if not loop.last %}, {% endif %}
+      {%- endfor %}
+    </p>
+  </section>
+  {% endfor %}
+
+  {% if issue.missed %}<p class="missed">Мимо кассы: {{ issue.missed }}</p>{% endif %}
+</main>
+<footer>
+  <a href="../">Все выпуски</a> · <a href="../feed.xml">Atom</a><br>
+  Выпуск подготовлен ИИ без ручной редактуры — важные факты сверяйте с первоисточником.
+</footer>
