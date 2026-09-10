@@ -50,7 +50,9 @@ def digest() -> dict:
 
 
 def test_valid_digest_passes(digest, corpus):
-    assert validate(digest, corpus)["blocks"]
+    checked, report = validate(digest, corpus)
+    assert checked["blocks"]
+    assert report.clean
 
 
 def test_unknown_article_id_is_rejected(digest, corpus):
@@ -61,7 +63,7 @@ def test_unknown_article_id_is_rejected(digest, corpus):
 
 def test_url_is_written_by_code_not_by_the_model(digest, corpus):
     """Ссылку в выпуск ставит код по идентификатору — выдумать её нельзя."""
-    checked = validate(digest, corpus)
+    checked, _ = validate(digest, corpus)
     assert checked["blocks"][0]["sources"] == [{"name": "Hochi News", "url": URL_A}]
 
 

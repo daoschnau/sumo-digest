@@ -3,9 +3,7 @@
 Уровень 1 — схема. Уровень 2 — ссылки и факты: каждая ссылка обязана быть
 во входном корпусе. Ссылка, которой там нет, — выдумка модели, и это
 единственная ошибка такой системы, которая по-настоящему дорого стоит:
-читатель идёт проверить факт и упирается в 404.
-
-Уровень 3 (линтер транслитерации) появится на E3.
+читатель идёт проверить факт и упирается в 404. Уровень 3 — транслитерация.
 """
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ from jsonschema import Draft202012Validator
 
 from .models import Corpus
 from .schema import load_schema
+from .translit import LintReport, lint_digest
 
 # Порядок значимости из спецификации: макуути и дзюрё → бандзуке → травмы →
 # тренировки → низшие дивизионы → прочее.
@@ -122,12 +121,21 @@ def resolve_sources(digest: dict, corpus: Corpus) -> dict:
     return digest
 
 
-def validate(digest: dict, corpus: Corpus) -> dict:
-    """Возвращает выпуск с проставленными ссылками и порядком либо падает."""
+def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
+    """Три уровня подряд. Возвращает готовый выпуск и отчёт линтера.
+
+    Порядок важен: схема — прежде чем ходить по полям, ссылки — прежде чем
+    тратить время на текст, и только потом транслитерация, которая текст меняет.
+    """
     problems = check_schema(digest)
     if problems:
         raise ValidationFailed(problems)
     problems = check_facts(digest, corpus)
     if problems:
         raise ValidationFailed(problems)
-    return sort_blocks(resolve_sources(digest, corpus))
+
+    digest, report = lint_digest(digest)
+    if report.rejects:
+        raise ValidationFailed(report.rejects)
+
+    return sort_blocks(resolve_sources(digest, corpus)), report

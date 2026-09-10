@@ -125,7 +125,7 @@ def main() -> int:
     print(f"сырой ответ: {raw_path}")
 
     try:
-        digest = validate(digest, corpus)
+        digest, lint = validate(digest, corpus)
     except ValidationFailed as failure:
         print("\nВЫПУСК НЕ ПРОШЁЛ ВАЛИДАЦИЮ:", file=sys.stderr)
         for problem in failure.problems:
@@ -134,6 +134,18 @@ def main() -> int:
 
     options.out.write_text(json.dumps(digest, ensure_ascii=False, indent=2) + "\n",
                            encoding="utf-8")
+
+    # Сработавшие правила линтера — важнейшая часть лога: по ним видно,
+    # на каких именах модель дрейфует от выпуска к выпуску.
+    if lint.fixes:
+        print("\nтранслитерация исправлена:")
+        for wrong, right, count in lint.fixes:
+            print(f"  «{wrong}» → «{right}» ×{count}")
+    if lint.warnings:
+        print("\nтранслитерация, предупреждения:")
+        for note in lint.warnings:
+            print(f"  {note}")
+
     print(f"\nвыпуск прошёл валидацию, блоков: {len(digest['blocks'])}")
     print(f"главное: {digest['lead'][:120]}")
     for block in digest["blocks"]:
