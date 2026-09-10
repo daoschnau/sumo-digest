@@ -32,10 +32,28 @@ jobs:
           uv run ruff check .
           uv run pytest -q
 
+      # Обход источников и вызов модели — сетевые шаги, и падают они обычно
+      # разово. Упавший прогон повторяется, а не оставляет день без выпуска.
       - name: Сбор корпуса
+        id: collect
+        continue-on-error: true
+        run: uv run python -m sumo_digest.collect --dry-run
+
+      - name: Сбор корпуса, повтор
+        if: steps.collect.outcome == 'failure'
         run: uv run python -m sumo_digest.collect --dry-run
 
       - name: Выпуск
+        id: issue
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUMO_DIGEST_MODEL: ${{ inputs.model }}
+        run: uv run python -m sumo_digest.llm
+
+      # Вторая попытка идёт с тем же корпусом: у модели просто другой ответ.
+      - name: Выпуск, повтор
+        if: steps.issue.outcome == 'failure'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUMO_DIGEST_MODEL: ${{ inputs.model }}
