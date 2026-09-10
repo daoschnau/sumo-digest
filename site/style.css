@@ -1,0 +1,78 @@
+/* Один файл, без сборщиков и JS. Читаемость важнее оформления. */
+
+:root {
+  --ink: #1a1a1a;
+  --muted: #6b6b6b;
+  --line: #e0ddd8;
+  --paper: #fbfaf8;
+  --accent: #7a2f2f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8e6e3;
+    --muted: #9a958e;
+    --line: #33312e;
+    --paper: #16161a;
+    --accent: #d98c8c;
+  }
+}
+
+/* Иероглифы в скобках требуют шрифта с поддержкой CJK — задаём явно. */
+body {
+  margin: 0;
+  padding: 2.5rem 1.25rem 4rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: 1rem/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", "Noto Sans JP",
+        Meiryo, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+main { max-width: 36rem; margin: 0 auto; }
+
+a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 2px; }
+a:hover { text-decoration-color: var(--accent); }
+
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -.01em; }
+h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
+
+.period, .meta { color: var(--muted); font-size: .85rem; margin: 0 0 2rem; }
+.lead { font-size: 1.08rem; margin: 0 0 .5rem; }
+.block-date { color: var(--muted); font-size: .8rem; letter-spacing: .02em; }
+.block p { margin: .5rem 0 .6rem; }
+
+.sources { font-size: .82rem; color: var(--muted); margin: 0 0 .5rem; }
+.sources a { color: var(--muted); }
+
+.missed {
+  margin: 2.5rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .88rem;
+}
+
+.note {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: .9rem 1rem;
+  margin: 2rem 0;
+  font-size: .88rem;
+  color: var(--muted);
+}
+.note strong { color: var(--ink); font-weight: 600; }
+
+.issues { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+.issues li { padding: .7rem 0; border-bottom: 1px solid var(--line); }
+.issues .when { color: var(--muted); font-size: .8rem; display: block; }
+
+footer {
+  max-width: 36rem;
+  margin: 3.5rem auto 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .82rem;
+}
