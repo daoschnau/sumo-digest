@@ -201,6 +201,41 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     return "ок", len(matched)
 
 
+def probe(url: str, defaults: dict) -> None:
+    """Разведка одиночного адреса: жив ли он и что за ссылки на нём есть."""
+    timeout = float(defaults.get("timeout_seconds", 15))
+    user_agent = defaults.get("user_agent", "sumo-digest/1.0")
+    print(f"\n=== разведка {url}")
+    try:
+        response = httpx.get(url, timeout=timeout, follow_redirects=True,
+                             headers={"User-Agent": user_agent})
+    except httpx.HTTPError as error:
+        print(f"    СБОЙ ЗАПРОСА: {type(error).__name__}: {error}")
+        return
+
+    print(f"    HTTP {response.status_code}, {len(response.content)} байт,"
+          f" итоговый адрес {response.url}")
+    if response.status_code != 200:
+        return
+
+    parser = PageLinks()
+    parser.feed(response.text)
+    raw_links = (parser.hrefs
+                 + ABSOLUTE_URL.findall(response.text)
+                 + QUOTED_PATH.findall(response.text))
+    groups: dict[str, list[str]] = {}
+    for raw in raw_links:
+        absolute = normalize(urljoin(str(response.url), raw))
+        parts = urlsplit(absolute)
+        if not parts.netloc:
+            continue
+        segments = [x for x in parts.path.split("/") if x][:2]
+        groups.setdefault(f"{parts.netloc}/{'/'.join(segments)}", []).append(absolute)
+    for key, links in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:12]:
+        print(f"      {len(links):>4}  {key}")
+        print(f"            {links[0]}")
+
+
 def main() -> int:
     arguments = argparse.ArgumentParser(description="Живая проверка листингов источников")
     arguments.add_argument("sources", nargs="*", help="id источников; пусто — все включённые")
@@ -208,10 +243,17 @@ def main() -> int:
                            help="сколько ссылок печатать (по умолчанию 5)")
     arguments.add_argument("--dump", action="store_true",
                            help="печатать все совпавшие ссылки, а не первые --show")
+    arguments.add_argument("--probe", action="append", default=[], metavar="URL",
+                           help="разведать произвольный адрес (можно несколько раз)")
     options = arguments.parse_args()
 
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     defaults = config.get("defaults", {})
+
+    if options.probe:
+        for url in options.probe:
+            probe(url, defaults)
+        return 0
     selected = [s for s in config["sources"]
                 if s.get("enabled", True)
                 and (not options.sources or s["id"] in options.sources)]

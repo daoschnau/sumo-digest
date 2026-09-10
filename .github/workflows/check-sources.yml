@@ -19,6 +19,10 @@ on:
         required: false
         default: false
         type: boolean
+      probe:
+        description: "Разведать произвольные адреса (через пробел), вместо обычной проверки"
+        required: false
+        type: string
 
 jobs:
   check:
@@ -38,5 +42,8 @@ jobs:
 
       - name: Обход листингов
         run: |
+          PROBES=""
+          for url in ${{ inputs.probe }}; do PROBES="$PROBES --probe $url"; done
           uv run python scripts/check_sources.py \
-            --show "${{ inputs.show }}" ${{ inputs.dump && '--dump' || '' }} ${{ inputs.sources }}
+            --show "${{ inputs.show }}" ${{ inputs.dump && '--dump' || '' }} \
+            $PROBES ${{ inputs.sources }}

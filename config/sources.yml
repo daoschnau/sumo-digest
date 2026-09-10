@@ -84,7 +84,12 @@ sources:
     enabled: true
     listing_url: "https://sumo.sports.smt.docomo.ne.jp/news/"
     rss: null
-    link_pattern: "/news/\\d+"
+    # Проверено на E0: сам dmenu статей не держит, ссылки ведут на
+    # topics.smt.docomo.ne.jp/article/<издание>/sports/<id>.
+    link_pattern: "topics\\.smt\\.docomo\\.ne\\.jp/article/[a-z]+/sports/"
+    note: |
+      Агрегатор: перепечатывает Hochi, Sponichi, Sanspo, Chunichi, Daily Sports, Jiji.
+      Дубли с этими источниками неизбежны — склеивать на шаге select по заголовку.
 
   - id: chunichi
     name: Chunichi Sports
