@@ -11,7 +11,8 @@ import csv
 import json
 import os
 import sys
-from datetime import date
+import time
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
@@ -26,6 +27,17 @@ from .validate import ValidationFailed, validate
 BUILD = Path("build")
 NEW_TERMS = Path("data/new_terms.csv")
 NEW_TERMS_HEADER = ("original", "romaji", "russian", "issue_date", "status")
+
+
+def save_report(report: dict) -> None:
+    """Отчёт о прогоне: по нему потом видно, почему выпуск стал хуже.
+
+    Без этого разбирать деградацию можно только по обрывкам лога Actions,
+    которые живут ограниченное время и не сравниваются между собой.
+    """
+    BUILD.mkdir(parents=True, exist_ok=True)
+    (BUILD / "run.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+                                    encoding="utf-8")
 
 
 def save_corpus(corpus: Corpus) -> None:
@@ -114,13 +126,28 @@ def main() -> int:
         print(f"Выпуск за {today} уже есть — делать нечего.")
         return 0
 
+    report: dict = {"started_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                    "model": options.model, "dry_run": dry_run, "steps": {}}
+    clock = time.monotonic()
+
+    def took(step: str) -> None:
+        nonlocal clock
+        report["steps"][step] = round(time.monotonic() - clock, 1)
+        clock = time.monotonic()
+
     print(f"1. collect · период с {state.last_issue_date}")
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     corpus = collect(config, state, today)
     save_corpus(corpus)
+    took("collect")
+    report["period"] = {"from": corpus.period_from, "to": corpus.period_to}
+    report["sources"] = [s.as_dict() for s in corpus.sources]
+    report["corpus_articles"] = len(corpus.articles)
     for status in corpus.sources:
         print(f"   {status.id:<14} {status.links_found:>4} ссылок  {status.status}")
     if not corpus.articles:
+        report["failed"] = "пустой корпус"
+        save_report(report)
         print("Корпус пуст: писать не из чего.", file=sys.stderr)
         return 1
     print(f"   статей в корпусе: {len(corpus.articles)}")
@@ -129,12 +156,17 @@ def main() -> int:
     digest, usage = write_digest(corpus, options.model)
     (BUILD / "digest.raw.json").write_text(
         json.dumps(digest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    took("write")
+    report["usage"] = usage
     print(f"   токенов: вход {usage['input_tokens']}, выход {usage['output_tokens']}")
 
     print("3. validate")
     try:
         digest, lint = validate(digest, corpus)
     except ValidationFailed as failure:
+        report["failed"] = "валидация"
+        report["validation_problems"] = failure.problems
+        save_report(report)
         print("   выпуск не прошёл валидацию:", file=sys.stderr)
         for problem in failure.problems:
             print(f"     - {problem}", file=sys.stderr)
@@ -150,9 +182,18 @@ def main() -> int:
     for note in lint.warnings:
         print(f"   предупреждение: {note}")
     print(f"   блоков: {len(digest['blocks'])}")
+    took("validate")
+    report["lint"] = {
+        "fixes": [{"wrong": w, "right": r, "count": n} for w, r, n in lint.fixes],
+        "problems": [str(problem) for problem in lint.problems],
+        "warnings": lint.warnings,
+    }
+    report["blocks"] = len(digest["blocks"])
+    report["issue_date"] = digest["issue_date"]
 
     if dry_run:
         render_site([digest], BUILD / "site")
+        save_report(report)
         print(f"\nDRY RUN: ничего не опубликовано, сайт собран в {BUILD / 'site'}")
         return 0
 
@@ -162,6 +203,11 @@ def main() -> int:
     print(f"   выпуск: {issue_path}")
     print(f"   новых имён в накопителе: {added}")
     print(f"   сайт: {SITE} ({len(load_issues())} выпусков)")
+    took("publish")
+    report["new_terms_added"] = added
+    report["finished_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+    save_report(report)
+    print(f"   отчёт: {BUILD / 'run.json'}")
     return 0
 
 

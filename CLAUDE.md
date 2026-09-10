@@ -43,6 +43,7 @@
 uv sync                                  # установка
 python -m sumo_digest.run --dry-run      # полный прогон без публикации
 python -m sumo_digest.collect --dry-run  # только сбор корпуса, без LLM
+python -m sumo_digest.acceptance --latest # приёмка выпуска по чек-листу §7.3
 python scripts/check_sources.py          # живая проверка листингов (руками, не в CI)
 pytest                                   # тесты
 ruff check . && ruff format --check .    # линт

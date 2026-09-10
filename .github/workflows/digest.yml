@@ -79,6 +79,15 @@ jobs:
             ${{ inputs.period_from && format('--period-from {0}', inputs.period_from) || '' }} \
             ${{ inputs.force && '--force' || '' }}
 
+      # Приёмка по чек-листу §7.3. Публикацию не блокирует — выпуск уже собран,
+      # а провалы видно в логе прогона и в build/run.json.
+      - name: Приёмка выпуска
+        if: >-
+          inputs.dry_run != true &&
+          (steps.digest.outcome == 'success' || steps.retry.outcome == 'success')
+        continue-on-error: true
+        run: uv run python -m sumo_digest.acceptance --latest
+
       # Логи и сырой ответ модели сохраняются всегда, включая провал валидации.
       # Тексты статей наружу не уходят — только опись корпуса (инвариант 8).
       - name: Артефакты запуска
@@ -87,6 +96,7 @@ jobs:
         with:
           name: run-${{ github.run_id }}
           path: |
+            build/run.json
             build/digest.raw.json
             build/corpus.meta.json
           retention-days: 14
