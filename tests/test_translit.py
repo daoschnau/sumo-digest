@@ -33,6 +33,9 @@ def rules() -> dict:
     ("Аонисики", "Аонишики"),
     ("Тандзи", "Танджи"),
     ("хариматэ", "харитэ"),
+    ("Даиешо", "Дайейшо"),
+    ("Дайэйшо", "Дайейшо"),
+    ("Вакатакаге", "Вакатакакаге"),
     ("аматорское сумо", "любительское сумо"),
 ])
 def test_known_errors_are_fixed(wrong, right, rules):
@@ -152,3 +155,10 @@ def test_field_path_round_trips(rules):
     assert digest["blocks"][1]["body"] == "стало"
     write_field(digest, "lead", "новое")
     assert read_field(digest, "lead") == "новое"
+
+
+def test_correct_name_is_not_broken_by_the_rule_that_fixes_it(rules):
+    """«Вакатакаге» → «Вакатакакаге» не должно превращать верное в «Вакатакакакаге»."""
+    fixed, report = lint_text("Вакатакакаге снялся с турнира.", rules)
+    assert fixed == "Вакатакакаге снялся с турнира."
+    assert not report.fixes

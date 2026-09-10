@@ -17,6 +17,8 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from .translit import lint_digest
+
 TEMPLATES = Path("templates")
 ISSUES = Path("data/issues")
 SITE = Path("site")
@@ -116,13 +118,38 @@ def render_site(issues: list[dict], out_dir: Path = SITE,
     return written
 
 
+def relint_archive(directory: Path = ISSUES) -> list[tuple[str, list]]:
+    """Прогоняет архив через текущие правила транслитерации и переписывает файлы.
+
+    Нужно каждый раз, когда в config/translit_rules.yml добавляется правило:
+    новое написание должно доехать и до старых выпусков, а не только до будущих.
+    """
+    changed: list[tuple[str, list]] = []
+    for path in sorted(directory.glob("*.json")):
+        issue = json.loads(path.read_text(encoding="utf-8"))
+        fixed, report = lint_digest(issue)
+        if not report.fixes:
+            continue
+        path.write_text(json.dumps(fixed, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8")
+        changed.append((path.name, report.fixes))
+    return changed
+
+
 def main() -> int:
     arguments = argparse.ArgumentParser(description="Сборка сайта из архива выпусков")
     arguments.add_argument("--issues", type=Path, default=ISSUES)
     arguments.add_argument("--out", type=Path, default=SITE)
     arguments.add_argument("--base-url", default=os.getenv("SUMO_DIGEST_BASE_URL",
                                                            DEFAULT_BASE_URL))
+    arguments.add_argument("--relint", action="store_true",
+                           help="применить текущие правила транслитерации к архиву")
     options = arguments.parse_args()
+
+    if options.relint:
+        for name, fixes in relint_archive(options.issues):
+            listed = ", ".join(f"«{w}» → «{r}» ×{n}" for w, r, n in fixes)
+            print(f"поправлен {name}: {listed}")
 
     issues = load_issues(options.issues)
     if not issues:

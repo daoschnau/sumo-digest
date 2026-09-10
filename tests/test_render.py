@@ -115,3 +115,37 @@ def test_dates_are_written_the_way_a_reader_reads_them():
 
 def test_empty_archive_renders_nothing(tmp_path):
     assert load_issues(tmp_path / "нет-такой-папки") == []
+
+
+def test_relint_carries_a_new_rule_into_the_published_archive(tmp_path):
+    """Правило, добавленное сегодня, должно доехать и до вчерашних выпусков."""
+    import json
+
+    from sumo_digest.render import relint_archive
+
+    archive = tmp_path / "issues"
+    archive.mkdir()
+    stale = issue("2026-09-10", "Одзэки Даиешо провёл схватку.")
+    stale["blocks"][0]["body"] = "Маегашира Вакатакаге снялся с турнира."
+    (archive / "2026-09-10.json").write_text(json.dumps(stale, ensure_ascii=False),
+                                             encoding="utf-8")
+
+    changed = relint_archive(archive)
+    assert changed and changed[0][0] == "2026-09-10.json"
+
+    fixed = json.loads((archive / "2026-09-10.json").read_text(encoding="utf-8"))
+    assert "Дайейшо" in fixed["lead"] and "Даиешо" not in fixed["lead"]
+    assert "Вакатакакаге" in fixed["blocks"][0]["body"]
+
+
+def test_relint_leaves_a_clean_archive_alone(tmp_path):
+    import json
+
+    from sumo_digest.render import relint_archive
+
+    archive = tmp_path / "issues"
+    archive.mkdir()
+    (archive / "2026-09-07.json").write_text(
+        json.dumps(issue("2026-09-07", "Озеки Киришима готов к Аки Басё."),
+                   ensure_ascii=False), encoding="utf-8")
+    assert relint_archive(archive) == []
