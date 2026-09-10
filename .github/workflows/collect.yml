@@ -1,0 +1,39 @@
+name: Сбор корпуса
+
+# Только вручную: шаг ходит по всем источникам, регулярно так делать незачем,
+# пока нет самого выпуска. Модель здесь не участвует, ключ API не нужен.
+on:
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установка зависимостей
+        run: |
+          pip install uv
+          uv sync --frozen
+
+      - name: Тесты и линт
+        run: |
+          uv run ruff check .
+          uv run pytest -q
+
+      - name: Сбор корпуса
+        run: uv run python -m sumo_digest.collect --dry-run
+
+      - name: Корпус артефактом
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-${{ github.run_id }}
+          path: build/corpus.json
+          retention-days: 14
+          if-no-files-found: warn

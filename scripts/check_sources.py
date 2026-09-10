@@ -20,46 +20,19 @@ import argparse
 import re
 import sys
 import urllib.robotparser
-from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 import yaml
 
+from sumo_digest.links import ABSOLUTE_URL, QUOTED_PATH, PageLinks, normalize_url
+
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "sources.yml"
 MIN_LINKS = 5  # критерий готовности E0 из ROADMAP.md
 
-# Часть листингов отрисовывается скриптом, и в разметке нет ни одного <a> на статью:
-# адреса лежат в JSON внутри страницы. Эти две регулярки достают их оттуда.
-# Site-specific селекторов по-прежнему нет — только поиск URL в тексте.
-ABSOLUTE_URL = re.compile(r"https?://[^\s\"'<>\\)]{8,}")
-QUOTED_PATH = re.compile(r"[\"'](/[^\"'\s<>\\]{3,})[\"']")
 FEEDISH = re.compile(r"(rss|atom|feed|\.xml)", re.IGNORECASE)
 API_LIKE = re.compile(r"(/api/|\.json|graphql|wp-json|/feed|rss)", re.IGNORECASE)
-
-
-class PageLinks(HTMLParser):
-    """Собирает href всех <a> и адреса RSS/Atom из <link rel=alternate>."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.hrefs: list[str] = []
-        self.feeds: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        a = {k: (v or "") for k, v in attrs}
-        if tag == "a" and a.get("href"):
-            self.hrefs.append(a["href"])
-        elif tag == "link" and a.get("href"):
-            if "rss" in a.get("type", "") or "atom" in a.get("type", ""):
-                self.feeds.append(a["href"])
-
-
-def normalize(url: str) -> str:
-    """Убирает query и fragment — дедупликация по нормализованному URL (ТЗ §3.1)."""
-    parts = urlsplit(url)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def robots_allows(url: str, user_agent: str, timeout: float) -> bool | None:
@@ -107,7 +80,7 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     def candidates(raw_links) -> dict[str, None]:
         found: dict[str, None] = {}
         for raw in raw_links:
-            absolute = normalize(urljoin(str(response.url), raw))
+            absolute = normalize_url(urljoin(str(response.url), raw))
             if pattern.search(absolute):
                 found.setdefault(absolute, None)
         return found
@@ -138,7 +111,7 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
                      + ABSOLUTE_URL.findall(response.text)
                      + QUOTED_PATH.findall(response.text))
         for raw in raw_links:
-            absolute = normalize(urljoin(str(response.url), raw))
+            absolute = normalize_url(urljoin(str(response.url), raw))
             # Хост не фильтруем: часть изданий держит статьи на соседнем домене
             # (dmenu — на topics.smt.docomo.ne.jp), и именно он нам и нужен.
             if urlsplit(absolute).netloc:
@@ -166,7 +139,7 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
             if netloc and not netloc.endswith(host.split(".", 1)[-1]):
                 external[netloc] = external.get(netloc, 0) + 1
             if API_LIKE.search(absolute):
-                api_like.setdefault(normalize(absolute), None)
+                api_like.setdefault(normalize_url(absolute), None)
 
         if external:
             top = sorted(external.items(), key=lambda kv: -kv[1])[:8]
@@ -183,7 +156,7 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     else:
         print("    RSS/Atom: не объявлен")
 
-    feed_links = {normalize(urljoin(str(response.url), href)) for href in parser.hrefs
+    feed_links = {normalize_url(urljoin(str(response.url), href)) for href in parser.hrefs
                   if FEEDISH.search(href)}
     if feed_links:
         print("    похожие на фид ссылки со страницы:")
@@ -225,7 +198,7 @@ def probe(url: str, defaults: dict) -> None:
                  + QUOTED_PATH.findall(response.text))
     groups: dict[str, list[str]] = {}
     for raw in raw_links:
-        absolute = normalize(urljoin(str(response.url), raw))
+        absolute = normalize_url(urljoin(str(response.url), raw))
         parts = urlsplit(absolute)
         if not parts.netloc:
             continue

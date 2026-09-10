@@ -24,7 +24,9 @@ sources:
     enabled: true
     listing_url: "https://www.sponichi.co.jp/sports/tokusyu/sumou/"
     rss: null
-    link_pattern: "/sports/news/\\d{4}/\\d{2}/\\d{2}/.+"
+    # s00005 — код раздела сумо в имени файла. Без него шаблон ловит все
+    # спортивные новости издания, попавшие на страницу (220 ссылок на E0).
+    link_pattern: "/sports/news/\\d{4}/\\d{2}/\\d{2}/kiji/\\d{8}s00005\\d+c\\.html"
     note: "Ключевой источник фактуры. Обходить всегда, недоступность не понижает приоритет."
 
   - id: hochi
@@ -32,10 +34,21 @@ sources:
     priority: 1
     lang: ja
     enabled: true
+    # Собственные листинги Hochi (тег 大相撲 и раздел /sumo/) рисуются скриптом:
+    # в разметке нет ни одной ссылки на статью, /feed/ и /sitemap.xml — 404 (E0).
+    # Поэтому идентификаторы берём из перепечаток dmenu, а текст и ссылку —
+    # у самого Hochi: id в адресе dmenu совпадает с родным id издания.
     listing_url: "https://hochi.news/tag/%E5%A4%A7%E7%9B%B8%E6%92%B2"
     rss: null
-    link_pattern: "https://hochi\\.news/articles/\\d+\\.html"
-    note: "Ключевой источник фактуры. Обходить всегда."
+    link_pattern: "https://hochi\\.news/articles/[0-9]{8}-[A-Z0-9]+\\.html"
+    via:
+      listing_url: "https://sumo.sports.smt.docomo.ne.jp/news/"
+      # Скобочная группа — то, из чего собирается канонический адрес.
+      link_pattern: "topics\\.smt\\.docomo\\.ne\\.jp/article/hochi/sports/hochi-([0-9]{8}-[A-Z0-9]+)"
+      canonical_url: "https://hochi.news/articles/{0}.html"
+    note: |
+      Ключевой источник фактуры, обходить всегда. Видим только те материалы,
+      которые перепечатал dmenu, — это не весь поток издания.
 
   - id: nikkansports
     name: Nikkan Sports
