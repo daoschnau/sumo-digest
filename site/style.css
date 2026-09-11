@@ -38,14 +38,16 @@ a:hover { text-decoration-color: var(--accent); }
 h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -.01em; }
 h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
 
-.period, .meta { color: var(--muted); font-size: .85rem; margin: 0 0 2rem; }
+.period, .meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.75rem; }
 .lead { font-size: 1.08rem; margin: 0 0 .5rem; }
 .block-date { color: var(--muted); font-size: .8rem; letter-spacing: .02em; }
 .block p { margin: .5rem 0 .6rem; }
 
-/* Пояснение термина и знак «написание не сверено» — аппарат, а не фраза:
-   он должен читаться как сноска и не перебивать предложение. */
-.gloss { color: var(--muted); }
+/* Японское написание в скобках, пояснение термина, знак «написание не сверено» —
+   аппарат, а не фраза. Кегль здесь важнее цвета: иероглиф занимает кегельную
+   площадку целиком, а строчная кириллица — половину, поэтому в одном размере
+   самое служебное место фразы выглядит самым заметным. */
+.aside { color: var(--muted); font-size: .9em; }
 .unverified {
   color: var(--muted);
   font-size: .75em;
@@ -55,6 +57,7 @@ h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
 
 .sources { font-size: .82rem; color: var(--muted); margin: 0 0 .5rem; }
 .sources a { color: var(--muted); }
+.sources a:hover { color: var(--accent); }
 
 .missed {
   margin: 2.5rem 0 0;
@@ -64,19 +67,25 @@ h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
   font-size: .88rem;
 }
 
-.note {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: .9rem 1rem;
-  margin: 2rem 0;
-  font-size: .88rem;
-  color: var(--muted);
+/* Список выпусков — единственное действие на странице: заголовок выпуска
+   должен быть крупнее и заметнее всего, что лежит вокруг. */
+.issues { list-style: none; padding: 0; margin: 0 0 3.5rem; }
+.issues li { padding: .8rem 0; border-bottom: 1px solid var(--line); }
+.issues li:last-child { border-bottom: none; }
+.issues li > a {
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
 }
-.note strong { color: var(--ink); font-weight: 600; }
+.issues .when { color: var(--muted); font-size: .8rem; display: block; margin-top: .2rem; }
 
-.issues { list-style: none; padding: 0; margin: 1.5rem 0 2.5rem; }
-.issues li { padding: .7rem 0; border-bottom: 1px solid var(--line); }
-.issues .when { color: var(--muted); font-size: .8rem; display: block; }
+/* Служебная часть: внутри плотно, сверху — воздух. Пока все отступы были
+   одинаковые, глаз не видел, где кончается содержание и начинается аппарат. */
+.about { font-size: .88rem; color: var(--muted); }
+.about p { margin: 0 0 .5rem; }
+.about summary { cursor: pointer; }
+.about details p { margin: .6rem 0 0; }
 
 footer {
   max-width: 36rem;

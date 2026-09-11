@@ -60,6 +60,14 @@ GLOSS = re.compile(r"[  ]?\[(?P<gloss>[^\[\]]{2,80})\]")
 UNVERIFIED_MARK = ('<sup class="unverified" title="транслитерация требует '
                    'проверки">?</sup>')
 
+# Скобка с японским написанием: «(豊昇龍)», «(元小結旭豊, Asahiyutaka?)».
+# Кегль у иероглифа тот же, а площадку он занимает всю — рядом со строчной
+# кириллицей самая служебная часть фразы выглядит самой заметной. Поэтому
+# скобку приглушаем, но только эту: «(частичный разрыв)» — обычный текст.
+CJK = r"぀-ヿ㐀-䶿一-鿿ｦ-ﾟ"
+APPARATUS = re.compile(rf"\((?P<inside>[^()]*(?:[{CJK}]|{re.escape(UNVERIFIED_MARK)})"
+                       r"[^()]*)\)")
+
 
 def prose(text: str, glossed: set[str]) -> Markup:
     """Текст выпуска → готовый к вёрстке HTML.
@@ -71,13 +79,15 @@ def prose(text: str, glossed: set[str]) -> Markup:
     """
     marked = ROMAJI_NOTE.sub(lambda match: match.group("romaji") + UNVERIFIED_MARK,
                              str(escape(text)))
+    marked = APPARATUS.sub(
+        lambda match: f'<span class="aside">({match.group("inside")})</span>', marked)
 
     def once(match: re.Match) -> str:
         gloss = match.group("gloss")
         if gloss.casefold() in glossed:
             return ""
         glossed.add(gloss.casefold())
-        return f' <span class="gloss">[{gloss}]</span>'
+        return f' <span class="aside">[{gloss}]</span>'
 
     return Markup(GLOSS.sub(once, marked))
 
