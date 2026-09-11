@@ -260,8 +260,22 @@ def test_the_mark_legend_is_absent_when_everything_is_verified(site):
     assert "транслитерация не сверена" not in html
 
 
-def test_a_term_is_explained_once_per_page(tmp_path):
-    """Модель поясняет термин в каждом блоке — на странице это повтор подряд."""
+def test_terms_are_explained_below_the_text_not_inside_it(tmp_path):
+    """Два пояснения подряд рвут абзац на куски даже приглушённые."""
+    termed = issue("2026-09-10", "Главное за период.")
+    termed["blocks"][0]["body"] = ("Дело ограничивается шико [упражнение с подъёмом "
+                                   "ноги] и грудью в буцукари-гейко [упражнение "
+                                   "на выталкивание].")
+    render_site([termed], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "ограничивается шико и грудью в буцукари-гейко." in html
+    assert "<dt>шико</dt> <dd>— упражнение с подъёмом ноги</dd>" in html
+    assert "<dt>буцукари-гейко</dt>" in html
+
+
+def test_a_term_repeated_in_two_blocks_gets_one_glossary_line(tmp_path):
+    """Модель поясняет термин в каждом блоке — внизу он нужен один раз."""
     repeated = issue("2026-09-10", "Главное за период.")
     second = json.loads(json.dumps(repeated["blocks"][0]))
     repeated["blocks"][0]["body"] = "Жёсткость тачиай [начальный сход] была хуже."
@@ -273,7 +287,22 @@ def test_a_term_is_explained_once_per_page(tmp_path):
 
     html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
     assert html.count("начальный сход") == 1
-    assert html.count("тачиай") == 2, "сам термин остаётся в обоих блоках"
+    assert html.count("тачиай") == 3, "термин в двух блоках плюс строка глоссария"
+
+
+def test_an_issue_without_terms_gets_no_glossary(site):
+    html = (site / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "Термины" not in html
+
+
+def test_a_term_with_punctuation_before_the_bracket_is_read_correctly(tmp_path):
+    odd = issue("2026-09-10", "Главное за период.")
+    odd["blocks"][0]["body"] = "Помешал тачиай, [начальный сход] вышел рваным."
+    render_site([odd], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "<dt>тачиай</dt>" in html, "запятая не должна попасть в термин"
+    assert "Помешал тачиай, вышел рваным." in html
 
 
 def test_the_feed_keeps_the_text_the_model_wrote(tmp_path):

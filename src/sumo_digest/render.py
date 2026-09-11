@@ -54,8 +54,12 @@ ROMAJI_NOTE = re.compile(r"romaji:\s*(?P<romaji>[^—)]+?)\s*—\s*требуе�
 
 # «тачиай [начальный сход]» — пояснение термина. Модель ставит его при первом
 # упоминании в каждом блоке (так задумано: блоки читают вразнобой и переставляет
-# их код), но на одной странице подряд один и тот же перевод не нужен дважды.
-GLOSS = re.compile(r"[  ]?\[(?P<gloss>[^\[\]]{2,80})\]")
+# их код). На странице пояснения собираются в глоссарий внизу: даже приглушённые,
+# в абзаце они рвут фразу, а в первом же абзаце их бывает два подряд.
+GLOSS = re.compile(r"(?P<term>[^\s\[\]()]+)[  ]?\[(?P<gloss>[^\[\]]{2,80})\]")
+
+# Термин перед скобкой может прийти с хвостом пунктуации: «тачиай, [начальный сход]».
+TERM_EDGES = " ,.;:!?«»\"'—–-"
 
 UNVERIFIED_MARK = ('<sup class="unverified" title="транслитерация требует '
                    'проверки">?</sup>')
@@ -69,42 +73,42 @@ APPARATUS = re.compile(rf"\((?P<inside>[^()]*(?:[{CJK}]|{re.escape(UNVERIFIED_MA
                        r"[^()]*)\)")
 
 
-def prose(text: str, glossed: set[str]) -> Markup:
+def prose(text: str, glossary: dict[str, tuple[str, str]]) -> Markup:
     """Текст выпуска → готовый к вёрстке HTML.
 
-    Данные не трогаем: и пометка о проверке, и повторные пояснения терминов
-    остаются в JSON и уезжают в фид. Здесь снимается только то, что мешает
-    читать страницу подряд. `glossed` общий на весь выпуск — он и помнит,
-    какие термины уже пояснены выше.
+    Данные не трогаем: и пометка о проверке, и пояснения терминов остаются
+    в JSON и уезжают в фид. Здесь снимается только то, что мешает читать
+    страницу подряд. `glossary` общий на весь выпуск: пояснения вынимаются
+    из фраз в порядке появления и собираются под текстом.
     """
     marked = ROMAJI_NOTE.sub(lambda match: match.group("romaji") + UNVERIFIED_MARK,
                              str(escape(text)))
     marked = APPARATUS.sub(
         lambda match: f'<span class="aside">({match.group("inside")})</span>', marked)
 
-    def once(match: re.Match) -> str:
-        gloss = match.group("gloss")
-        if gloss.casefold() in glossed:
-            return ""
-        glossed.add(gloss.casefold())
-        return f' <span class="aside">[{gloss}]</span>'
+    def collect(match: re.Match) -> str:
+        term = match.group("term").strip(TERM_EDGES)
+        if term:
+            glossary.setdefault(term.casefold(), (term, match.group("gloss")))
+        return match.group("term")
 
-    return Markup(GLOSS.sub(once, marked))
+    return Markup(GLOSS.sub(collect, marked))
 
 
 def page_view(issue: dict) -> dict:
     """Копия выпуска с подготовленным текстом. Оригинал нужен индексу и фиду."""
-    glossed: set[str] = set()
+    glossary: dict[str, tuple[str, str]] = {}
     view = dict(issue)
-    view["lead"] = prose(issue.get("lead", ""), glossed)
+    view["lead"] = prose(issue.get("lead", ""), glossary)
     view["blocks"] = []
     for block in issue.get("blocks", []):
         prepared = dict(block)
-        prepared["subtitle"] = prose(block.get("subtitle", ""), glossed)
-        prepared["body"] = prose(block.get("body", ""), glossed)
+        prepared["subtitle"] = prose(block.get("subtitle", ""), glossary)
+        prepared["body"] = prose(block.get("body", ""), glossary)
         view["blocks"].append(prepared)
     if issue.get("missed"):
-        view["missed"] = prose(issue["missed"], glossed)
+        view["missed"] = prose(issue["missed"], glossary)
+    view["glossary"] = list(glossary.values())
     return view
 
 
