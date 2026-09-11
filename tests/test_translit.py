@@ -2,7 +2,7 @@
 
 import pytest
 
-from sumo_digest.models import Article, Corpus
+from sumo_digest.models import Article, Corpus, SourceStatus
 from sumo_digest.translit import (
     distance,
     lint_digest,
@@ -129,7 +129,8 @@ def test_transliteration_problem_does_not_kill_the_issue():
     corpus = Corpus(period_from="2026-09-07", period_to="2026-09-10", articles=[
         Article(id="a001", source_id="hochi", source_name="Hochi News",
                 url="https://hochi.news/articles/20260910-OHT1T51188.html",
-                title="t", text="x" * 300, published="2026-09-10")])
+                title="t", text="x" * 300, published="2026-09-10")],
+        sources=[SourceStatus(id="hochi", name="Hochi News", articles_used=1)])
     digest = {
         "issue_date": "2026-09-10",
         "period": {"from": "2026-09-07", "to": "2026-09-10"},

@@ -114,7 +114,9 @@ def page_view(issue: dict) -> dict:
 
 def has_unverified(view: dict) -> bool:
     """Есть ли на странице хоть один знак вопроса — от него зависит сноска внизу."""
-    texts = [view["lead"], *(block["body"] for block in view["blocks"])]
+    texts = [view["lead"], view.get("missed", ""),
+             *(block[field] for block in view["blocks"]
+               for field in ("subtitle", "body"))]
     return any(UNVERIFIED_MARK in str(text) for text in texts)
 
 

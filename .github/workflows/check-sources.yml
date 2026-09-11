@@ -24,6 +24,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -40,10 +43,20 @@ jobs:
           pip install uv
           uv sync --frozen
 
+      # Входы идут через env, а не подстановкой в текст команды: GitHub
+      # раскрывает ${{ }} до запуска shell, и probe вида «x; curl … | sh»
+      # выполнился бы. Запустить dispatch может только тот, у кого и так есть
+      # запись, так что это не дыра для чужого, а привычка, которая перестанет
+      # быть безобидной на первом же соавторе.
       - name: Обход листингов
+        env:
+          PROBE: ${{ inputs.probe }}
+          SOURCES: ${{ inputs.sources }}
+          SHOW: ${{ inputs.show }}
+          DUMP: ${{ inputs.dump }}
         run: |
           PROBES=""
-          for url in ${{ inputs.probe }}; do PROBES="$PROBES --probe $url"; done
+          for url in $PROBE; do PROBES="$PROBES --probe $url"; done
+          [ "$DUMP" = "true" ] && DUMP_FLAG="--dump" || DUMP_FLAG=""
           uv run python scripts/check_sources.py \
-            --show "${{ inputs.show }}" ${{ inputs.dump && '--dump' || '' }} \
-            $PROBES ${{ inputs.sources }}
+            --show "$SHOW" $DUMP_FLAG $PROBES $SOURCES

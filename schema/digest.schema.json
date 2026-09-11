@@ -17,7 +17,7 @@
     "issue_date": {
       "type": "string",
       "format": "date",
-      "description": "Дата выпуска, ISO 8601"
+      "description": "Дата выпуска, ISO 8601. Перезаписывается пайплайном из корпуса."
     },
     "period": {
       "type": "object",
@@ -40,7 +40,7 @@
     "sources_reviewed": {
       "type": "array",
       "minItems": 1,
-      "description": "Основа для строки периода. Заполняется пайплайном, модель только подтверждает использование.",
+      "description": "Основа для строки периода. Перезаписывается пайплайном из результата обхода (validate.resolve_sources_reviewed) — что бы сюда ни попало от модели, в выпуск уйдут настоящие статусы.",
       "items": {
         "type": "object",
         "additionalProperties": false,

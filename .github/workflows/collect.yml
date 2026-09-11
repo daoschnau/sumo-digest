@@ -5,6 +5,9 @@ name: Сбор корпуса
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   collect:
     runs-on: ubuntu-latest

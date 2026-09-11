@@ -135,14 +135,35 @@ def repair_field(text: str, complaints: list[str], model: str) -> str:
                    "content": f"Фрагмент:\n{text}\n\nНарушения:\n{listed}"}],
         output_config={"format": {"type": "json_schema", "schema": REPAIR_SCHEMA}},
     )
-    answer = next(block.text for block in response.content if block.type == "text")
+    answer = next((block.text for block in response.content
+                   if block.type == "text"), None)
+    if answer is None:
+        raise RuntimeError(f"ответ на правку пришёл без текстового блока: "
+                           f"stop_reason={response.stop_reason}")
     return json.loads(answer)["corrected"]
+
+
+# Потолок на правку. Одно новое правило reject, оказавшееся шире задуманного,
+# срабатывает разом во всех блоках: полей у линтера до 32, и в системный промпт
+# каждого вызова уезжает всё руководство по транслитерации. Без потолка это
+# сотни тысяч входных токенов молча, в четверг утром. Остаток уходит в лог —
+# выпуск всё равно выходит, это политика CLAUDE.md: замечание уровня 3
+# публикацию не останавливает.
+MAX_REPAIR_CALLS = 8
 
 
 def repair_transliteration(digest: dict, report: LintReport,
                            model: str) -> tuple[dict, LintReport]:
     """Чинит поля с замечаниями и перепроверяет их линтером."""
-    for where, problems in report.by_field().items():
+    fields = list(report.by_field().items())
+    if len(fields) > MAX_REPAIR_CALLS:
+        skipped = [where for where, _ in fields[MAX_REPAIR_CALLS:]]
+        print(f"  замечаний в {len(fields)} полях, правим первые "
+              f"{MAX_REPAIR_CALLS}; без правки остались: {', '.join(skipped)}",
+              file=sys.stderr)
+        fields = fields[:MAX_REPAIR_CALLS]
+
+    for where, problems in fields:
         original = read_field(digest, where)
         try:
             fixed = repair_field(original, [str(p) for p in problems], model)

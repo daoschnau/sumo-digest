@@ -33,10 +33,14 @@
 
 ```
 GitHub Actions (cron, пн/чт)
-  1. collect    config/sources.yml → ссылки на статьи (RSS или regex по листингу)
+  1. collect    config/sources.yml → ссылки на статьи (regex по листингу)
   2. extract    HTML → текст, дата, заголовок; отсев по дате и по seen_urls
-  3. select     LLM #1 (только если корпус > 12): что берём, что дубли
-  4. write      LLM #2: корпус → digest.json по schema/digest.schema.json
+  3. —           отбор моделью не делается: три задачи, ради которых он был
+                задуман, решены детерминированно в collect — квота на источник,
+                склейка перепечаток агрегатора по заголовку, отсев несумошного
+                по requires_keyword. prompts/select.md оставлен как след
+                решения и кодом не читается.
+  4. write      корпус → digest.json по schema/digest.schema.json
   5. validate   схема → ссылки ⊆ корпус → линтер транслитерации
   6. render     Jinja2 → HTML выпуска, индекс, Atom
   7. publish    коммит выпуска и состояния → GitHub Pages
@@ -68,16 +72,19 @@ config/sources.yml           закрытый список источников:
 config/translit_rules.yml    правила линтера: autofix / reject / warn + канонические имена
 schema/digest.schema.json    контракт выходного JSON
 prompts/write.md             системный промпт писателя выпуска
-prompts/select.md            системный промпт отборщика
+prompts/select.md            промпт отборщика; шаг не реализован, файл кодом не читается
+prompts/translit_guide.md    §3 спецификации отдельным файлом
+src/sumo_digest/             collect, extract, llm, validate, render, state, run, acceptance
+templates/                   issue.html, index.html, atom.xml, style.css
+site/                        результат рендеринга (GitHub Pages)
+tests/                       фикстуры вместо сети; scripts/check_sources.py — живая проверка
 data/state.json              дата прошлого выпуска и seen_urls, коммитится пайплайном
 data/new_terms.csv           накопитель новых транслитераций (§5 спецификации)
+data/issues/                 архив выпусков; сайт пересобирается из него целиком
 docs/                        исходная спецификация агента
-.github/workflows/digest.yml сборка и публикация; расписание включается на E5
+.github/workflows/digest.yml сборка выпуска и публикация по расписанию
+.github/workflows/pages.yml  публикация сайта при изменении вёрстки или архива
 ```
-
-Появится по ходу этапов: `src/sumo_digest/` (E1–E4), `templates/` и `site/` (E4),
-`tests/` и `scripts/check_sources.py` (E0–E1), `pyproject.toml` (E0),
-`prompts/translit_guide.md` — §3 спецификации отдельным файлом для prompt caching (E2).
 
 ---
 

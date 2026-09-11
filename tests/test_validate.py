@@ -152,3 +152,53 @@ def test_corpus_manifest_carries_no_article_text(corpus):
     assert meta["articles"][0]["url"].startswith("https://")
     # Полный корпус тексты по-прежнему несёт: он нужен модели внутри прогона.
     assert corpus.as_dict()["articles"][0]["text"]
+
+
+def test_source_statuses_come_from_the_walk_not_from_the_model(digest):
+    """Строка «просмотрено N; не открылись: …» — факт о прогоне, не мнение."""
+    walked = Corpus(
+        period_from="2026-09-07", period_to="2026-09-10",
+        articles=[article("a001", URL_A, "Hochi News"),
+                  article("a002", URL_B, "Sponichi")],
+        sources=[SourceStatus(id="hochi", name="Hochi News", status="ok",
+                              articles_used=2),
+                 SourceStatus(id="nhk", name="NHK", status="failed"),
+                 SourceStatus(id="sankei", name="Sankei", status="partial")],
+    )
+    # Модель утверждает, что открылось всё и везде нашлось по статье.
+    digest["sources_reviewed"] = [{"name": name, "status": "ok", "articles_used": 3}
+                                  for name in ("Hochi News", "NHK", "Sankei")]
+
+    checked, _ = validate(digest, walked)
+    assert [(s["name"], s["status"]) for s in checked["sources_reviewed"]] == [
+        ("Hochi News", "ok"), ("NHK", "failed"), ("Sankei", "partial")]
+    assert checked["sources_reviewed"][1]["articles_used"] == 0
+
+
+def test_period_comes_from_the_corpus_not_from_the_model(digest, corpus):
+    """Иначе даты блоков сверяются с границами, которые назвала сама модель."""
+    digest["period"] = {"from": "2020-01-01", "to": "2030-12-31"}
+    digest["issue_date"] = "2030-12-31"
+
+    checked, _ = validate(digest, corpus)
+    assert checked["period"] == {"from": "2026-09-07", "to": "2026-09-10"}
+    assert checked["issue_date"] == "2026-09-10"
+
+
+def test_a_block_date_outside_the_real_window_no_longer_slips_through(digest, corpus):
+    """Раньше модель могла расширить окно вместе с датой блока и пройти."""
+    digest["period"] = {"from": "2020-01-01", "to": "2030-12-31"}
+    digest["blocks"][0]["date"] = "2030-06-01"
+
+    with pytest.raises(ValidationFailed) as failure:
+        validate(digest, corpus)
+    assert any("вне окна" in problem for problem in failure.value.problems)
+
+
+def test_a_date_that_is_not_a_date_is_caught_before_it_reaches_sorting(digest, corpus):
+    """jsonschema игнорирует format: date, а дальше по коду date.fromisoformat."""
+    digest["blocks"][0]["date"] = "10.09.2026"
+
+    with pytest.raises(ValidationFailed) as failure:
+        validate(digest, corpus)
+    assert any("не в формате" in problem for problem in failure.value.problems)

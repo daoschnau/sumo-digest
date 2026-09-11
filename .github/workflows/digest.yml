@@ -69,14 +69,21 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUMO_DIGEST_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: |
+          set +e
           uv run python -m sumo_digest.run \
             ${{ inputs.period_from && format('--period-from {0}', inputs.period_from) || '' }} \
             ${{ inputs.force && '--force' || '' }} \
             ${{ inputs.ignore_seen && '--ignore-seen' || '' }}
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
 
+      # Повтор только там, где он может помочь. Код 2 — пустой корпус: те же
+      # источники и тот же seen_urls дадут ровно тот же результат, а полный
+      # прогон стоит вызова модели.
       - name: Выпуск, повтор
         id: retry
-        if: steps.digest.outcome == 'failure'
+        if: steps.digest.outcome == 'failure' && steps.digest.outputs.code != '2'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUMO_DIGEST_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
@@ -118,6 +125,10 @@ jobs:
           git add site data/state.json data/new_terms.csv data/issues
           git diff --staged --quiet && echo "изменений нет" && exit 0
           git commit -m "Выпуск $(date -u +%Y-%m-%d)"
+          # Без этого пуш человека в main во время 25-минутного прогона роняет
+          # шаг на non-fast-forward: выпуск уже собран и оплачен, а умирает
+          # вместе с runner'ом.
+          git pull --rebase --autostash origin main
           git push
 
       - name: Сайт артефактом для Pages
