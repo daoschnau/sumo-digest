@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 from datetime import UTC, date, datetime
 from html import escape
@@ -17,6 +18,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup
 
 from .translit import lint_digest
 from .validate import sort_blocks
@@ -42,6 +44,64 @@ def stamp(value: str) -> str:
     parsed = date.fromisoformat(value)
     return datetime(parsed.year, parsed.month, parsed.day,
                     tzinfo=UTC).isoformat().replace("+00:00", "Z")
+
+
+# «Имя (漢字, romaji: Xxxx — требует проверки)» — конструкция из спецификации.
+# В данных она остаётся как есть, в вёрстке от неё остаётся романизация и знак
+# вопроса с подсказкой: в одном выпуске таких пометок бывает восемь, и «требует
+# проверки» посреди предложения читатель спотыкается о каждую.
+ROMAJI_NOTE = re.compile(r"romaji:\s*(?P<romaji>[^—)]+?)\s*—\s*требует проверки")
+
+# «тачиай [начальный сход]» — пояснение термина. Модель ставит его при первом
+# упоминании в каждом блоке (так задумано: блоки читают вразнобой и переставляет
+# их код), но на одной странице подряд один и тот же перевод не нужен дважды.
+GLOSS = re.compile(r"[  ]?\[(?P<gloss>[^\[\]]{2,80})\]")
+
+UNVERIFIED_MARK = ('<sup class="unverified" title="транслитерация требует '
+                   'проверки">?</sup>')
+
+
+def prose(text: str, glossed: set[str]) -> Markup:
+    """Текст выпуска → готовый к вёрстке HTML.
+
+    Данные не трогаем: и пометка о проверке, и повторные пояснения терминов
+    остаются в JSON и уезжают в фид. Здесь снимается только то, что мешает
+    читать страницу подряд. `glossed` общий на весь выпуск — он и помнит,
+    какие термины уже пояснены выше.
+    """
+    marked = ROMAJI_NOTE.sub(lambda match: match.group("romaji") + UNVERIFIED_MARK,
+                             str(escape(text)))
+
+    def once(match: re.Match) -> str:
+        gloss = match.group("gloss")
+        if gloss.casefold() in glossed:
+            return ""
+        glossed.add(gloss.casefold())
+        return f' <span class="gloss">[{gloss}]</span>'
+
+    return Markup(GLOSS.sub(once, marked))
+
+
+def page_view(issue: dict) -> dict:
+    """Копия выпуска с подготовленным текстом. Оригинал нужен индексу и фиду."""
+    glossed: set[str] = set()
+    view = dict(issue)
+    view["lead"] = prose(issue.get("lead", ""), glossed)
+    view["blocks"] = []
+    for block in issue.get("blocks", []):
+        prepared = dict(block)
+        prepared["subtitle"] = prose(block.get("subtitle", ""), glossed)
+        prepared["body"] = prose(block.get("body", ""), glossed)
+        view["blocks"].append(prepared)
+    if issue.get("missed"):
+        view["missed"] = prose(issue["missed"], glossed)
+    return view
+
+
+def has_unverified(view: dict) -> bool:
+    """Есть ли на странице хоть один знак вопроса — от него зависит сноска внизу."""
+    texts = [view["lead"], *(block["body"] for block in view["blocks"])]
+    return any(UNVERIFIED_MARK in str(text) for text in texts)
 
 
 def content(issue: dict) -> str:
@@ -91,10 +151,11 @@ def render_site(issues: list[dict], out_dir: Path = SITE,
         page_dir.mkdir(parents=True, exist_ok=True)
         unavailable = [source["name"] for source in issue.get("sources_reviewed", [])
                        if source.get("status") == "failed"]
+        view = page_view(issue)
         page = page_dir / "index.html"
-        page.write_text(env.get_template("issue.html").render(issue=issue,
-                                                              unavailable=unavailable),
-                        encoding="utf-8")
+        page.write_text(env.get_template("issue.html").render(
+            issue=view, unavailable=unavailable, unverified=has_unverified(view)),
+            encoding="utf-8")
         written.append(page)
 
     updated = issues[0]["issue_date"] if issues else date.today().isoformat()

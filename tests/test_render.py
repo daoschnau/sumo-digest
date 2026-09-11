@@ -1,5 +1,6 @@
 """Сайт: индекс, страницы выпусков, Atom-фид. Без сети, на выдуманных выпусках."""
 
+import json
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -194,3 +195,102 @@ def test_feed_links_point_at_the_custom_domain(tmp_path):
                 base_url="https://sumodigest.online/")
     entry = ET.parse(tmp_path / "feed.xml").getroot().find("a:entry", ATOM)
     assert entry.find("a:id", ATOM).text == "https://sumodigest.online/2026-09-10/"
+
+
+def test_single_day_period_is_printed_once(tmp_path):
+    """«10 сентября 2026–10 сентября 2026» — дата, продублированная сама с собой."""
+    one_day = issue("2026-09-10", "Главное за период.")
+    one_day["period"] = {"from": "2026-09-10", "to": "2026-09-10"}
+    render_site([one_day], tmp_path, base_url="https://example.test/")
+
+    period = " ".join((tmp_path / "2026-09-10" / "index.html").read_text(
+        encoding="utf-8").split())
+    assert "10 сентября 2026 · просмотрено" in period
+    assert "10 сентября 2026–10 сентября 2026" not in period
+
+
+def test_period_of_several_days_keeps_both_dates(site):
+    html = " ".join((site / "2026-09-10" / "index.html").read_text(
+        encoding="utf-8").split())
+    assert "7 сентября 2026–10 сентября 2026" in html
+
+
+def test_block_date_equal_to_the_issue_date_is_not_repeated(site):
+    """Семь блоков за день выпуска — семь одинаковых строк с датой."""
+    html = (site / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert '<p class="block-date">Рёгоку Кокугикан</p>' in html
+    assert "10 сентября 2026 · Рёгоку Кокугикан" not in html
+
+
+def test_block_date_is_printed_when_the_event_is_older_than_the_issue(tmp_path):
+    earlier = issue("2026-09-10", "Главное за период.")
+    earlier["blocks"][0]["date"] = "2026-09-09"
+    render_site([earlier], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "9 сентября 2026 · Рёгоку Кокугикан" in html
+
+
+def test_block_without_date_and_place_gets_no_empty_line(tmp_path):
+    bare = issue("2026-09-10", "Главное за период.")
+    bare["blocks"][0].pop("date")
+    bare["blocks"][0].pop("place")
+    render_site([bare], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert 'class="block-date"' not in html
+
+
+def test_unverified_spelling_becomes_a_mark_instead_of_a_phrase(tmp_path):
+    """«— требует проверки» посреди фразы встречается в выпуске до восьми раз."""
+    noted = issue("2026-09-10", "Главное за период.")
+    noted["blocks"][0]["body"] = ("Ояката Арашио (元幕内蒼国来, romaji: Sokokurai "
+                                  "— требует проверки) подтвердил снятие.")
+    render_site([noted], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "требует проверки)" not in html
+    assert "元幕内蒼国来, Sokokurai" in html, "иероглифы и романизация остаются"
+    assert 'class="unverified"' in html
+    assert "транслитерация не сверена" in html, "внизу страницы нужна расшифровка знака"
+
+
+def test_the_mark_legend_is_absent_when_everything_is_verified(site):
+    html = (site / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "транслитерация не сверена" not in html
+
+
+def test_a_term_is_explained_once_per_page(tmp_path):
+    """Модель поясняет термин в каждом блоке — на странице это повтор подряд."""
+    repeated = issue("2026-09-10", "Главное за период.")
+    second = json.loads(json.dumps(repeated["blocks"][0]))
+    repeated["blocks"][0]["body"] = "Жёсткость тачиай [начальный сход] была хуже."
+    second["subtitle"] = "Аонишики закрыл подготовку"
+    second["body"] = "На тачиай [начальный сход] он снова опоздал."
+    second["importance"] = 4
+    repeated["blocks"].append(second)
+    render_site([repeated], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert html.count("начальный сход") == 1
+    assert html.count("тачиай") == 2, "сам термин остаётся в обоих блоках"
+
+
+def test_the_feed_keeps_the_text_the_model_wrote(tmp_path):
+    """Вёрстка страницы — не правка выпуска: в данных и в фиде текст исходный."""
+    noted = issue("2026-09-10", "Главное за период.")
+    noted["blocks"][0]["body"] = ("Маегашира Аби (阿炎, romaji: Abi — требует проверки) "
+                                  "проиграл тачиай [начальный сход].")
+    render_site([noted], tmp_path, base_url="https://example.test/")
+
+    content = ET.parse(tmp_path / "feed.xml").getroot().find(
+        "a:entry/a:content", ATOM).text
+    assert "romaji: Abi — требует проверки" in content
+    assert "[начальный сход]" in content
+    assert noted["blocks"][0]["body"].startswith("Маегашира Аби (阿炎, romaji:")
+
+
+def test_index_puts_the_issues_above_the_explanations(site):
+    """За выпуском приходят каждый раз, преамбулу читают один."""
+    html = (site / "index.html").read_text(encoding="utf-8")
+    assert html.index('href="2026-09-10/"') < html.index("Выпуски готовит ИИ")
