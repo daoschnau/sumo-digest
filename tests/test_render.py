@@ -294,3 +294,29 @@ def test_index_puts_the_issues_above_the_explanations(site):
     """За выпуском приходят каждый раз, преамбулу читают один."""
     html = (site / "index.html").read_text(encoding="utf-8")
     assert html.index('href="2026-09-10/"') < html.index("Выпуски готовит ИИ")
+
+
+def test_japanese_spelling_is_set_apart_from_the_sentence(site):
+    """Иероглиф в одном кегле с кириллицей перетягивает внимание на себя."""
+    html = (site / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert '<span class="aside">(豊昇龍)</span>' in html
+
+
+def test_an_ordinary_parenthesis_stays_ordinary(tmp_path):
+    plain = issue("2026-09-10", "Главное за период.")
+    plain["blocks"][0]["body"] = ("Хошорю (豊昇龍) перенёс операцию на колене "
+                                  "(частичный разрыв) 29 июля.")
+    render_site([plain], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "колене (частичный разрыв) 29 июля" in html
+    assert '<span class="aside">(豊昇龍)</span>' in html
+
+
+def test_the_issue_link_is_the_loudest_thing_on_the_index(site):
+    """Единственное действие страницы не может быть тише ссылки на фид."""
+    css = (site / "style.css").read_text(encoding="utf-8")
+    assert ".issues li > a" in css
+    html = (site / "index.html").read_text(encoding="utf-8")
+    assert "<details>" in html, "дисклеймер свёрнут, а не обведён рамкой"
+    assert 'class="note"' not in html

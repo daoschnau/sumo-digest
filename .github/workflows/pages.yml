@@ -1,0 +1,75 @@
+name: Публикация сайта
+
+# Вёрстку можно менять, не перезапуская модель: сайт целиком пересобирается
+# из data/issues/*.json. Но до сих пор Pages обновлялись только внутри прогона
+# выпуска — и только когда модель действительно собрала новый выпуск. Правка
+# шаблона доезжала до main и оставалась там лежать: на сайте её никто не видел
+# до ближайшего понедельника или четверга. Этот workflow закрывает разрыв.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "templates/**"
+      - "data/issues/**"
+      - "src/sumo_digest/render.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Та же группа, что у прогона выпуска: пока собирается выпуск, сайт не деплоим.
+concurrency:
+  group: sumo-digest
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: vars.PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Именно вершина main, а не коммит, который запустил прогон. Запуск может
+      # отстоять от сборки: пока идёт прогон выпуска, этот workflow ждёт своей
+      # очереди в общей группе concurrency, и за это время бот успевает
+      # закоммитить новый выпуск. Выложить в такой момент состояние на момент
+      # триггера — значит снести с сайта только что вышедший выпуск.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установка зависимостей
+        run: |
+          pip install uv
+          uv sync --frozen
+
+      - name: Тесты и линт
+        run: |
+          uv run ruff check .
+          uv run pytest -q
+
+      # Пересобираем из архива, а не выкладываем site/ из репозитория: так
+      # шаблоны и выпуски заведомо сходятся, даже если site/ забыли закоммитить.
+      - name: Сборка сайта
+        run: uv run python -m sumo_digest.render
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: vars.PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
