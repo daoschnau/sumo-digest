@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="../style.css">
 <link rel="alternate" type="application/atom+xml" title="Сумо-дайджест" href="../feed.xml">
 <main>
-  <h1>🥋 Сумо-дайджест — {{ issue.issue_date | day }}</h1>
+  <h1>Сумо-дайджест — {{ issue.issue_date | day }}</h1>
 
   <p class="period">
     {% if issue.period.from == issue.period.to %}
@@ -43,6 +43,19 @@
     </p>
   </section>
   {% endfor %}
+
+  {# Пояснения терминов собраны здесь, а не оставлены в абзацах: в одном абзаце
+     их бывает два подряд, и фраза рвётся на куски даже приглушёнными. #}
+  {% if issue.glossary %}
+  <section class="glossary">
+    <h2>Термины</h2>
+    <dl>
+      {% for term, gloss in issue.glossary %}
+      <div><dt>{{ term }}</dt> <dd>— {{ gloss }}</dd></div>
+      {% endfor %}
+    </dl>
+  </section>
+  {% endif %}
 
   {% if issue.missed %}<p class="missed">Мимо кассы: {{ issue.missed }}</p>{% endif %}
 </main>

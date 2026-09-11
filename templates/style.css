@@ -59,6 +59,19 @@ h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
 .sources a { color: var(--muted); }
 .sources a:hover { color: var(--accent); }
 
+.glossary {
+  margin: 2.5rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .88rem;
+}
+.glossary h2 { font-size: .88rem; margin: 0; color: var(--ink); }
+.glossary dl { margin: .4rem 0 0; }
+.glossary dt { display: inline; color: var(--ink); }
+.glossary dd { display: inline; margin: 0; }
+.glossary div { margin-top: .15rem; }
+
 .missed {
   margin: 2.5rem 0 0;
   padding-top: 1rem;
@@ -69,7 +82,7 @@ h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
 
 /* Список выпусков — единственное действие на странице: заголовок выпуска
    должен быть крупнее и заметнее всего, что лежит вокруг. */
-.issues { list-style: none; padding: 0; margin: 0 0 3.5rem; }
+.issues { list-style: none; padding: 0; margin: 0 0 2.25rem; }
 .issues li { padding: .8rem 0; border-bottom: 1px solid var(--line); }
 .issues li:last-child { border-bottom: none; }
 .issues li > a {
