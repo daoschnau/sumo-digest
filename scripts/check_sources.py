@@ -19,36 +19,19 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import urllib.robotparser
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import yaml
 
-from sumo_digest.links import ABSOLUTE_URL, QUOTED_PATH, PageLinks, normalize_url
+from sumo_digest.links import ABSOLUTE_URL, QUOTED_PATH, PageLinks, normalize_url, robots_allows
 
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "sources.yml"
 MIN_LINKS = 5  # критерий готовности E0 из ROADMAP.md
 
 FEEDISH = re.compile(r"(rss|atom|feed|\.xml)", re.IGNORECASE)
 API_LIKE = re.compile(r"(/api/|\.json|graphql|wp-json|/feed|rss)", re.IGNORECASE)
-
-
-def robots_allows(url: str, user_agent: str, timeout: float) -> bool | None:
-    """Advisory-проверка robots.txt. None — файл недоступен, судить не беремся."""
-    parts = urlsplit(url)
-    robots_url = urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
-    try:
-        response = httpx.get(robots_url, timeout=timeout, follow_redirects=True,
-                             headers={"User-Agent": user_agent})
-        if response.status_code != 200:
-            return None
-        parser = urllib.robotparser.RobotFileParser()
-        parser.parse(response.text.splitlines())
-        return parser.can_fetch(user_agent, url)
-    except httpx.HTTPError:
-        return None
 
 
 def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:

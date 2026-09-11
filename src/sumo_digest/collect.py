@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
-from dataclasses import dataclass
+import time
+import urllib.robotparser
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
 
 from .extract import extract_article, is_fresh
-from .links import find_links
+from .links import find_links, robots_parser
 from .models import Article, ArticleRef, Corpus, SourceStatus
 from .state import State
 
@@ -31,24 +35,52 @@ class Fetcher:
 
     Спецификация запрещает повторять попытку к недоступному источнику, поэтому
     ретраев здесь нет: сбой запроса — это статус failed и переход к следующему.
+
+    robots.txt читается один раз на хост и соблюдается. Проект публикует
+    производный материал под своим доменом и открыто называет источники —
+    ходить туда вопреки прямому запрету незачем. `delay` держит паузу между
+    настоящими запросами: прогон и так идёт минуты, секунда на запрос ничего
+    не меняет, а девять изданий подряд без пауз выглядят иначе.
     """
 
     timeout: float
     user_agent: str
-    cache: dict[str, str | None] = None  # type: ignore[assignment]
+    delay: float = 1.0
+    cache: dict[str, str | None] = field(default_factory=dict)
+    robots: dict[str, urllib.robotparser.RobotFileParser | None] = field(
+        default_factory=dict)
+    blocked: set[str] = field(default_factory=set)
+    _last_request: float = 0.0
 
-    def __post_init__(self) -> None:
-        self.cache = {}
+    def allowed(self, url: str) -> bool:
+        """False — robots.txt запрещает явно. Нет файла — не судим, разрешаем."""
+        host = urlsplit(url).netloc
+        if host not in self.robots:
+            self.robots[host] = robots_parser(url, self.user_agent, self.timeout)
+        parser = self.robots[host]
+        if parser is None:
+            return True
+        if parser.can_fetch(self.user_agent, url):
+            return True
+        self.blocked.add(host)
+        return False
 
     def get(self, url: str) -> str | None:
         if url in self.cache:
             return self.cache[url]
+        if not self.allowed(url):
+            self.cache[url] = None
+            return None
+        pause = self.delay - (time.monotonic() - self._last_request)
+        if pause > 0:
+            time.sleep(pause)
         try:
             response = httpx.get(url, timeout=self.timeout, follow_redirects=True,
                                  headers={"User-Agent": self.user_agent})
             text = response.text if response.status_code == 200 else None
         except httpx.HTTPError:
             text = None
+        self._last_request = time.monotonic()
         self.cache[url] = text
         return text
 
@@ -66,13 +98,36 @@ def article_refs(source: dict, fetcher: Fetcher, limit: int) -> tuple[list[Artic
 
     html = fetcher.get(listing_url)
     if html is None:
-        return [], "failed"
+        status = "blocked" if urlsplit(listing_url).netloc in fetcher.blocked else "failed"
+        return [], status
 
     links = find_links(html, listing_url, pattern, canonical)[:limit]
     return (
         [ArticleRef(source["id"], source["name"], url) for url in links],
         "ok" if links else "partial",
     )
+
+
+# Заголовок перепечатки совпадает с оригиналом слово в слово — по нему дубли
+# и ловятся. Сравниваем без пробелов, регистра и пунктуации: агрегатор иногда
+# меняет кавычки и добавляет пробел перед скобкой.
+TITLE_NOISE = re.compile(r"[\s\u3000　【】\[\]()（）「」『』\"'“”‘’·・、,。.!！?？:：;；\-—–]+")
+
+
+def title_key(title: str) -> str:
+    return TITLE_NOISE.sub("", title).casefold()
+
+
+def about_sumo(article: Article, keywords: list[str]) -> bool:
+    """Общая лента и рубрика единоборств приносят материал не про сумо.
+
+    Проверка нужна только источникам, у которых листинг шире темы, — у них
+    в конфиге стоит requires_keyword. Остальным она не задаётся и не применяется.
+    """
+    if not keywords:
+        return True
+    haystack = f"{article.title}\n{article.text}".casefold()
+    return any(word.casefold() in haystack for word in keywords)
 
 
 def collect(config: dict, state: State, today: date) -> Corpus:
@@ -82,12 +137,15 @@ def collect(config: dict, state: State, today: date) -> Corpus:
     fetcher = Fetcher(
         timeout=float(defaults.get("timeout_seconds", 15)),
         user_agent=defaults.get("user_agent", "sumo-digest/1.0"),
+        delay=float(defaults.get("delay_seconds", 1)),
     )
     max_links = int(defaults.get("max_links_per_source", 15))
     max_articles = int(budget.get("max_articles", 12))
+    per_source = int(budget.get("max_articles_per_source", max_articles))
 
     sources = sorted((s for s in config["sources"] if s.get("enabled", True)),
                      key=lambda s: s["priority"])
+    by_id = {source["id"]: source for source in sources}
 
     statuses: list[SourceStatus] = []
     pending: list[ArticleRef] = []
@@ -98,21 +156,49 @@ def collect(config: dict, state: State, today: date) -> Corpus:
                                      links_found=len(refs)))
         pending.extend(fresh)
 
-    # Бюджет тратим по приоритету источника, затем по порядку на листинге —
-    # это не бюджет браузинга, а контроль стоимости токенов.
     articles: list[Article] = []
     used: dict[str, int] = {}
-    for number, ref in enumerate(pending, start=1):
-        if len(articles) >= max_articles:
-            break
+    titles: set[str] = set()
+    taken: set[str] = set()
+    number = 0
+
+    def take(ref: ArticleRef, quota: int) -> bool:
+        """Пробует добавить статью в корпус. False — не подошла или не влезла."""
+        nonlocal number
+        if ref.url in taken or used.get(ref.source_id, 0) >= quota:
+            return False
         html = fetcher.get(ref.url)
         if html is None:
-            continue
+            return False
+        number += 1
         article = extract_article(html, ref, f"a{number:03d}")
         if article is None or not is_fresh(article, state.last_issue_date):
-            continue
+            return False
+        if not about_sumo(article, by_id[ref.source_id].get("requires_keyword") or []):
+            return False
+        # Агрегатор перепечатывает Hochi, Sponichi, Sanspo и Chunichi под своим
+        # адресом: разные URL, один текст. Источник с высшим приоритетом идёт
+        # первым, поэтому в корпусе остаётся оригинал, а не перепечатка.
+        key = title_key(article.title)
+        if key and key in titles:
+            return False
+        titles.add(key)
+        taken.add(ref.url)
         articles.append(article)
         used[ref.source_id] = used.get(ref.source_id, 0) + 1
+        return True
+
+    # Два прохода. Первый — с квотой на источник: без неё Sponichi с его
+    # пятнадцатью ссылками способен забрать весь бюджет, и Hochi, который
+    # по инварианту 3 обходится всегда и первым, не попадёт в выпуск вовсе.
+    # Второй добирает остаток, если в тихий день квоты не хватило на бюджет.
+    for pass_quota in (per_source, max_articles):
+        for ref in pending:
+            if len(articles) >= max_articles:
+                break
+            take(ref, pass_quota)
+        if len(articles) >= max_articles:
+            break
 
     for status in statuses:
         status.articles_used = used.get(status.id, 0)

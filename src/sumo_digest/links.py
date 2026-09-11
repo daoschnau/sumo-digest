@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import re
+import urllib.robotparser
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit, urlunsplit
+
+import httpx
 
 # Часть листингов отрисовывается скриптом, и в разметке нет ни одного <a> на статью:
 # адреса лежат в JSON внутри страницы. Эти регулярки достают их оттуда.
@@ -33,6 +36,34 @@ class PageLinks(HTMLParser):
         elif tag == "link" and a.get("href"):
             if "rss" in a.get("type", "") or "atom" in a.get("type", ""):
                 self.feeds.append(a["href"])
+
+
+def robots_parser(url: str, user_agent: str,
+                  timeout: float) -> urllib.robotparser.RobotFileParser | None:
+    """robots.txt хоста. None — файла нет или он недоступен, судить не беремся.
+
+    Живёт здесь, а не в scripts/, чтобы боевой обход и ручная проверка
+    источников читали одни и те же правила: проверка, которую делает только
+    скрипт раз в месяц, ничего не защищает.
+    """
+    parts = urlsplit(url)
+    robots_url = urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
+    try:
+        response = httpx.get(robots_url, timeout=timeout, follow_redirects=True,
+                             headers={"User-Agent": user_agent})
+        if response.status_code != 200:
+            return None
+    except httpx.HTTPError:
+        return None
+    parser = urllib.robotparser.RobotFileParser()
+    parser.parse(response.text.splitlines())
+    return parser
+
+
+def robots_allows(url: str, user_agent: str, timeout: float) -> bool | None:
+    """Advisory-проверка одного адреса. None — файл недоступен."""
+    parser = robots_parser(url, user_agent, timeout)
+    return None if parser is None else parser.can_fetch(user_agent, url)
 
 
 def normalize_url(url: str) -> str:
