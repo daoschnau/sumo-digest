@@ -42,11 +42,18 @@ class Check:
 
 
 def allowed_hosts(path: Path = SOURCES) -> set[str]:
-    """Хосты закрытого списка: и листингов, и канонических адресов статей."""
+    """Хосты закрытого списка: листингов, канонических адресов и самих статей.
+
+    У NHK и dmenu статьи живут не на хосте листинга (`news.web.nhk`,
+    `topics.smt.docomo.ne.jp`), и без `article_hosts` приёмка проваливала
+    пункт «все ссылки из закрытого списка» на совершенно верном выпуске.
+    Хост из `link_pattern` не выводим: у половины источников он относительный.
+    """
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     hosts: set[str] = set()
     for source in config["sources"]:
         hosts.add(urlsplit(source["listing_url"]).netloc)
+        hosts.update(source.get("article_hosts") or [])
         via = source.get("via") or {}
         if via.get("canonical_url"):
             hosts.add(urlsplit(via["canonical_url"]).netloc)
@@ -66,7 +73,7 @@ def check_issue(issue: dict) -> list[Check]:
                         f"{len(issue.get('sources_reviewed', []))} источников"))
 
     lead_sentences = sentences(issue.get("lead", ""))
-    checks.append(Check("«Главное» — 2–3 строки",
+    checks.append(Check("«Главное» — 2–4 предложения (счёт грубый)",
                         2 <= lead_sentences <= 4, f"предложений: {lead_sentences}"))
 
     count = len(blocks)

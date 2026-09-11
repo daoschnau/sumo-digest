@@ -108,3 +108,40 @@ def test_new_terms_never_reach_the_issue_text(digest, corpus, tmp_path):
     assert "Отоваяма" not in page
     # В JSON выпуска они остаются: оттуда их забирает накопитель.
     assert json.loads(issue_path.read_text(encoding="utf-8"))["new_terms"]
+
+
+def test_site_is_built_before_the_state_moves(tmp_path, monkeypatch):
+    """Упади рендер после сохранения состояния — повтор скажет «всё уже есть»."""
+    from sumo_digest import run as run_module
+
+    digest = {"issue_date": "2026-09-10", "blocks": [], "lead": "x"}
+    corpus = Corpus(period_from="2026-09-09", period_to="2026-09-10", articles=[])
+    state = State(last_issue_date="2026-09-09")
+    state_path = tmp_path / "state.json"
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("рендер упал")
+
+    monkeypatch.setattr(run_module, "render_site", explode)
+    with pytest.raises(RuntimeError):
+        run_module.publish(digest, corpus, state, date(2026, 9, 10),
+                           issues_dir=tmp_path / "issues", site_dir=tmp_path / "site",
+                           state_path=state_path)
+
+    assert not state_path.exists(), "состояние не должно сдвинуться на упавшем рендере"
+    assert state.last_issue_date != "2026-09-10"
+
+
+def test_new_terms_file_created_from_scratch_gets_a_header(tmp_path):
+    from sumo_digest.run import append_new_terms
+
+    path = tmp_path / "new_terms.csv"
+    digest = {"issue_date": "2026-09-10",
+              "new_terms": [{"original": "時不動", "romaji": "Tokifudo",
+                             "russian": "Токифудо", "status": "требует проверки"}]}
+    append_new_terms(digest, path)
+
+    first = path.read_text(encoding="utf-8").splitlines()[0]
+    assert first.startswith("original,"), "иначе DictReader прочитает данные как заголовок"
+    # Второй прогон обязан узнать уже записанное имя.
+    assert append_new_terms(digest, path) == 0

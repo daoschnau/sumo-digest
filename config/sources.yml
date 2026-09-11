@@ -79,6 +79,9 @@ sources:
     # Проверено на E0: страница отдаёт ссылки на новый сайт news.web.nhk,
     # статьи там вида /newsweb/na/nd-20260907de48801. Старый /news/html/… мёртв.
     link_pattern: "news\\.web\\.nhk/newsweb/na/nd-[0-9a-z]+"
+    # Статьи живут не на хосте листинга. Приёмка сверяет ссылки выпуска
+    # с закрытым списком, и без этой строки верный выпуск проваливал проверку.
+    article_hosts: ["news.web.nhk"]
 
   - id: sankei
     name: Sankei
@@ -100,6 +103,7 @@ sources:
     # Проверено на E0: сам dmenu статей не держит, ссылки ведут на
     # topics.smt.docomo.ne.jp/article/<издание>/sports/<id>.
     link_pattern: "topics\\.smt\\.docomo\\.ne\\.jp/article/[a-z]+/sports/"
+    article_hosts: ["topics.smt.docomo.ne.jp"]
     note: |
       Агрегатор: перепечатывает Hochi, Sponichi, Sanspo, Chunichi, Daily Sports, Jiji.
       Дубли с этими источниками неизбежны — склеивать на шаге select по заголовку.

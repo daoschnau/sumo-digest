@@ -25,6 +25,9 @@ from .state import State
 from .validate import ValidationFailed, validate
 
 BUILD = Path("build")
+
+# Код возврата «повторять незачем»: корпус пуст, второй прогон даст то же самое.
+EMPTY_CORPUS = 2
 NEW_TERMS = Path("data/new_terms.csv")
 NEW_TERMS_HEADER = ("original", "romaji", "russian", "issue_date", "status")
 
@@ -66,8 +69,13 @@ def append_new_terms(digest: dict, path: Path = NEW_TERMS) -> int:
             known = {row["original"] for row in csv.DictReader(handle)}
 
     added = 0
+    # Файл может быть создан заново — без заголовка первая же строка данных
+    # станет заголовком для DictReader на следующем прогоне.
+    fresh = not path.exists()
     with path.open("a", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=NEW_TERMS_HEADER)
+        if fresh:
+            writer.writeheader()
         for term in terms:
             if term["original"] in known:
                 continue
@@ -89,8 +97,16 @@ def publish(digest: dict, corpus: Corpus, state: State, today: date,
     """Кладёт выпуск в архив, двигает состояние и пересобирает сайт."""
     issues_dir.mkdir(parents=True, exist_ok=True)
     issue_path = issues_dir / f"{digest['issue_date']}.json"
+    if issue_path.exists():
+        print(f"перезаписываю существующий выпуск {issue_path}")
     issue_path.write_text(json.dumps(digest, ensure_ascii=False, indent=2) + "\n",
                           encoding="utf-8")
+
+    # Сайт собираем до того, как двигать состояние. Наоборот было опасно:
+    # упади render_site, на диске уже стоял бы сегодняшний last_issue_date,
+    # повтор прогона сказал бы «выпуск за сегодня уже есть», вернул ноль,
+    # и workflow закоммитил бы выпуск с несобранным сайтом под зелёной галочкой.
+    render_site(load_issues(issues_dir), site_dir)
 
     # Помечаем весь корпус, а не только вошедшее в выпуск: остальное модель
     # уже видела и отвергла, платить за него повторно незачем.
@@ -101,7 +117,6 @@ def publish(digest: dict, corpus: Corpus, state: State, today: date,
     state.last_issue_slug = digest["issue_date"]
     state.save(state_path) if state_path else state.save()
 
-    render_site(load_issues(issues_dir), site_dir)
     return issue_path
 
 
@@ -159,8 +174,11 @@ def main() -> int:
     if not corpus.articles:
         report["failed"] = "пустой корпус"
         save_report(report)
+        # Отдельный код возврата: повтор здесь бессмыслен — источники те же,
+        # seen_urls те же, второй прогон гарантированно пуст. Workflow по нему
+        # и отличает «повторять незачем» от «попробовать ещё раз».
         print("Корпус пуст: писать не из чего.", file=sys.stderr)
-        return 1
+        return EMPTY_CORPUS
     print(f"   статей в корпусе: {len(corpus.articles)}")
 
     print(f"2. write · {options.model}")
