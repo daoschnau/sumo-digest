@@ -57,8 +57,7 @@
             "enum": [
               "ok",
               "partial",
-              "failed",
-              "blocked"
+              "failed"
             ],
             "description": "partial — открылись только заголовки; failed — источник недоступен"
           },

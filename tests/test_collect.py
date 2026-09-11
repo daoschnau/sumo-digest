@@ -121,52 +121,74 @@ def test_titles_differing_only_in_punctuation_are_the_same_headline():
     assert title_key("霧島、綱取りへ") != title_key("豊昇龍、休場へ")
 
 
-def test_robots_is_read_once_per_host_and_obeyed(monkeypatch):
-    """Боевой обход обязан уважать robots.txt, а не только ручная проверка."""
+def forbidding_parser():
     import urllib.robotparser
 
+    parser = urllib.robotparser.RobotFileParser()
+    parser.parse(["User-agent: *", "Disallow: /"])
+    return parser
+
+
+def test_robots_is_read_once_per_host(monkeypatch):
     from sumo_digest import collect as collect_module
 
-    forbidding = urllib.robotparser.RobotFileParser()
-    forbidding.parse(["User-agent: *", "Disallow: /news/"])
     calls: list[str] = []
 
     def fake_parser(url, user_agent, timeout):
         calls.append(url)
-        return forbidding
+        return forbidding_parser()
 
     monkeypatch.setattr(collect_module, "robots_parser", fake_parser)
     fetcher = Fetcher(timeout=1, user_agent="test", delay=0)
+    fetcher.check_robots("https://example.test/list")
+    fetcher.check_robots("https://example.test/a01")
 
-    assert fetcher.get("https://example.test/news/a01") is None
-    assert fetcher.get("https://example.test/news/a02") is None
-    assert len(calls) == 1, "robots.txt читается один раз на хост"
-    assert "example.test" in fetcher.blocked
+    assert len(calls) == 1
+    assert "example.test" in fetcher.disallowed
 
 
-def test_a_missing_robots_file_does_not_stop_the_walk(monkeypatch):
-    """Нет файла — не судим: иначе первый же сбой отменит выпуск."""
+def test_a_missing_robots_file_leaves_no_complaint(monkeypatch):
+    """Нет файла — не судим: иначе первый же сбой загрузки поднимет тревогу."""
     from sumo_digest import collect as collect_module
 
     monkeypatch.setattr(collect_module, "robots_parser",
                         lambda url, user_agent, timeout: None)
     fetcher = Fetcher(timeout=1, user_agent="test", delay=0)
-    assert fetcher.allowed("https://example.test/news/a01")
-    assert not fetcher.blocked
+    fetcher.check_robots("https://example.test/a01")
+    assert not fetcher.disallowed
 
 
-def test_a_blocked_listing_is_reported_as_blocked_not_failed(state, monkeypatch):
-    """«Запрещено» и «не открылось» — разные вещи, и в выпуске это видно."""
-    import urllib.robotparser
+def test_a_robots_ban_is_reported_but_does_not_cancel_the_issue(state, monkeypatch):
+    """Молчаливый отказ по чужому файлу — это ноль вместо выпуска в четверг.
 
+    Запрет обязан быть виден в отчёте прогона, а решение — за владельцем:
+    сменить User-Agent, написать изданию или выключить источник в конфиге.
+    """
     from sumo_digest import collect as collect_module
 
-    forbidding = urllib.robotparser.RobotFileParser()
-    forbidding.parse(["User-agent: *", "Disallow: /"])
     monkeypatch.setattr(collect_module, "robots_parser",
-                        lambda url, user_agent, timeout: forbidding)
+                        lambda url, user_agent, timeout: forbidding_parser())
 
-    config = {"defaults": {"delay_seconds": 0}, "budget": {"max_articles": 12},
-              "sources": [source("sponichi", 1, 0)]}
+    pages = {"https://sponichi.test/a00": page("豊昇龍、秋場所を休場へ")}
+    config, fetcher = build([source("sponichi", 1, 1)], pages,
+                            {"max_articles": 12, "max_articles_per_source": 4})
+    # Настоящий Fetcher, чтобы проверка robots действительно отработала.
+    monkeypatch.setattr(collect_module, "Fetcher",
+                        lambda **_kwargs: RealCheckFetcher(fetcher.pages))
+
     corpus = collect(config, state, TODAY)
-    assert [s.status for s in corpus.sources] == ["blocked"]
+    assert len(corpus.articles) == 1, "выпуск обязан собраться вопреки запрету"
+    assert corpus.sources[0].status == "ok"
+    assert "robots.txt" in corpus.sources[0].note
+
+
+class RealCheckFetcher(Fetcher):
+    """Проверку robots выполняет по-настоящему, страницы берёт из словаря."""
+
+    def __init__(self, pages: dict[str, str]) -> None:
+        super().__init__(timeout=1, user_agent="test", delay=0)
+        self.pages = pages
+
+    def get(self, url: str) -> str | None:
+        self.check_robots(url)
+        return self.pages.get(url)

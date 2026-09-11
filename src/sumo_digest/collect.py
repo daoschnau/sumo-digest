@@ -36,11 +36,20 @@ class Fetcher:
     Спецификация запрещает повторять попытку к недоступному источнику, поэтому
     ретраев здесь нет: сбой запроса — это статус failed и переход к следующему.
 
-    robots.txt читается один раз на хост и соблюдается. Проект публикует
-    производный материал под своим доменом и открыто называет источники —
-    ходить туда вопреки прямому запрету незачем. `delay` держит паузу между
-    настоящими запросами: прогон и так идёт минуты, секунда на запрос ничего
-    не меняет, а девять изданий подряд без пауз выглядят иначе.
+    robots.txt читается один раз на хост, и запрет попадает в лог и в отчёт
+    прогона — но обход не останавливает. Это сенсор, а не ворота, и вот почему.
+    Молчаливый отказ по чужому файлу — это ноль вместо выпуска в четверг утром,
+    когда чинить его некому; та же логика, по которой замечание транслитерации
+    публикацию не блокирует. Узнав о запрете из лога, владелец решает сам:
+    сменить User-Agent, написать изданию или выключить источник в конфиге
+    (`enabled: false`) — механизм для этого уже есть.
+
+    Проверено 11.09.2026 на всех девяти: восемь разрешают, у dmenu файла нет.
+    То есть сегодня проверка ничего не меняет и нужна ровно на тот день,
+    когда кто-то поменяет свой robots.txt.
+
+    От бана по IP защищает не это, а `delay`: пауза между настоящими запросами.
+    Прогон и так идёт минуты, секунда на запрос ничего не стоит.
     """
 
     timeout: float
@@ -49,28 +58,22 @@ class Fetcher:
     cache: dict[str, str | None] = field(default_factory=dict)
     robots: dict[str, urllib.robotparser.RobotFileParser | None] = field(
         default_factory=dict)
-    blocked: set[str] = field(default_factory=set)
+    disallowed: set[str] = field(default_factory=set)
     _last_request: float = 0.0
 
-    def allowed(self, url: str) -> bool:
-        """False — robots.txt запрещает явно. Нет файла — не судим, разрешаем."""
+    def check_robots(self, url: str) -> None:
+        """Запоминает хосты, чей robots.txt запрещает этот адрес. Не блокирует."""
         host = urlsplit(url).netloc
         if host not in self.robots:
             self.robots[host] = robots_parser(url, self.user_agent, self.timeout)
         parser = self.robots[host]
-        if parser is None:
-            return True
-        if parser.can_fetch(self.user_agent, url):
-            return True
-        self.blocked.add(host)
-        return False
+        if parser is not None and not parser.can_fetch(self.user_agent, url):
+            self.disallowed.add(host)
 
     def get(self, url: str) -> str | None:
         if url in self.cache:
             return self.cache[url]
-        if not self.allowed(url):
-            self.cache[url] = None
-            return None
+        self.check_robots(url)
         pause = self.delay - (time.monotonic() - self._last_request)
         if pause > 0:
             time.sleep(pause)
@@ -98,8 +101,7 @@ def article_refs(source: dict, fetcher: Fetcher, limit: int) -> tuple[list[Artic
 
     html = fetcher.get(listing_url)
     if html is None:
-        status = "blocked" if urlsplit(listing_url).netloc in fetcher.blocked else "failed"
-        return [], status
+        return [], "failed"
 
     links = find_links(html, listing_url, pattern, canonical)[:limit]
     return (
@@ -202,6 +204,17 @@ def collect(config: dict, state: State, today: date) -> Corpus:
 
     for status in statuses:
         status.articles_used = used.get(status.id, 0)
+
+    # Запрет в robots.txt не снимает источник с обхода, но обязан быть виден:
+    # в логе прогона и в build/run.json, откуда его читает владелец.
+    for source in sources:
+        host = urlsplit(source["listing_url"]).netloc
+        if host in fetcher.disallowed:
+            note = f"robots.txt хоста {host} запрещает обход этим User-Agent"
+            for status in statuses:
+                if status.id == source["id"]:
+                    status.note = note
+            print(f"ВНИМАНИЕ: {source['id']} — {note}", file=sys.stderr)
 
     return Corpus(period_from=state.last_issue_date, period_to=today.isoformat(),
                   articles=articles, sources=statuses)

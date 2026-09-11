@@ -12,7 +12,12 @@ defaults:
   timeout_seconds: 15
   user_agent: "sumo-digest/1.0 (+https://github.com/daoschnau/sumo-digest)"
   max_links_per_source: 15
-  delay_seconds: 1          # пауза между запросами; robots.txt соблюдается всегда
+  # Пауза между запросами — то, что реально защищает от бана по IP.
+  # robots.txt при этом читается и запрет пишется в лог и в build/run.json,
+  # но обход не останавливает: молчаливый отказ по чужому файлу — это ноль
+  # вместо выпуска. Проверено 11.09.2026: восемь из девяти разрешают,
+  # у dmenu файла нет. Захочешь уважить чей-то запрет — enabled: false.
+  delay_seconds: 1
 
 budget:
   max_articles: 12          # верхняя граница корпуса, подаваемого модели
