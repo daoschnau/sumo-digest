@@ -43,6 +43,16 @@ h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
 .block-date { color: var(--muted); font-size: .8rem; letter-spacing: .02em; }
 .block p { margin: .5rem 0 .6rem; }
 
+/* Пояснение термина и знак «написание не сверено» — аппарат, а не фраза:
+   он должен читаться как сноска и не перебивать предложение. */
+.gloss { color: var(--muted); }
+.unverified {
+  color: var(--muted);
+  font-size: .75em;
+  cursor: help;
+  padding-left: .05em;
+}
+
 .sources { font-size: .82rem; color: var(--muted); margin: 0 0 .5rem; }
 .sources a { color: var(--muted); }
 
@@ -64,7 +74,7 @@ h2 { font-size: 1.1rem; line-height: 1.35; margin: 2.25rem 0 .4rem; }
 }
 .note strong { color: var(--ink); font-weight: 600; }
 
-.issues { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+.issues { list-style: none; padding: 0; margin: 1.5rem 0 2.5rem; }
 .issues li { padding: .7rem 0; border-bottom: 1px solid var(--line); }
 .issues .when { color: var(--muted); font-size: .8rem; display: block; }
 

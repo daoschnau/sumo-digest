@@ -9,8 +9,12 @@
   <h1>🥋 Сумо-дайджест — {{ issue.issue_date | day }}</h1>
 
   <p class="period">
-    {{ issue.period.from | day }}–{{ issue.period.to | day }} · просмотрено
-    {{ issue.sources_reviewed | length }} источников{% if unavailable %};
+    {% if issue.period.from == issue.period.to %}
+    {{ issue.period.from | day }}
+    {% else %}
+    {{ issue.period.from | day }}–{{ issue.period.to | day }}
+    {% endif %}
+    · просмотрено {{ issue.sources_reviewed | length }} источников{% if unavailable %};
     не открылись: {{ unavailable | join(', ') }}{% endif %}.
   </p>
 
@@ -19,11 +23,16 @@
   {% for block in issue.blocks %}
   <section class="block">
     <h2>{{ block.subtitle }}</h2>
+    {# Дату блока печатаем, только когда она не совпадает с датой выпуска:
+       иначе под каждым заголовком стоит одно и то же число. #}
+    {% set shown_date = block.date if block.date and block.date != issue.issue_date %}
+    {% if shown_date or block.place %}
     <p class="block-date">
-      {%- if block.date %}{{ block.date | day }}{% endif -%}
-      {%- if block.date and block.place %} · {% endif -%}
+      {%- if shown_date %}{{ shown_date | day }}{% endif -%}
+      {%- if shown_date and block.place %} · {% endif -%}
       {%- if block.place %}{{ block.place }}{% endif -%}
     </p>
+    {% endif %}
     <p>{{ block.body }}</p>
     <p class="sources">
       Источники:
@@ -39,5 +48,9 @@
 </main>
 <footer>
   <a href="../">Все выпуски</a> · <a href="../feed.xml">Atom</a><br>
+  {% if unverified %}
+  Знак <sup class="unverified">?</sup> после имени — транслитерация не сверена
+  с устоявшимся написанием.<br>
+  {% endif %}
   Выпуск подготовлен ИИ без ручной редактуры — важные факты сверяйте с первоисточником.
 </footer>

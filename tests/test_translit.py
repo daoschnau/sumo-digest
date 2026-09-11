@@ -70,6 +70,18 @@ def test_latin_inside_a_cyrillic_name_is_rejected(rules):
     assert any(problem.rule == "latin_inside_cyrillic" for problem in report.problems)
 
 
+def test_latin_beyond_ascii_inside_a_cyrillic_name_is_rejected(rules):
+    """«Спониči» в выпуске 10.09.2026 прошёл мимо правила: «č» — не [A-Za-z]."""
+    _, report = lint_text("По данным Хоči, схватка состоялась.", rules)
+    assert any(problem.rule == "latin_inside_cyrillic" for problem in report.problems)
+
+
+def test_the_publication_name_is_fixed_before_it_reaches_the_reader(rules):
+    fixed, report = lint_text("По данным Спониči, 19 побед.", rules)
+    assert fixed == "По данным Споничи, 19 побед."
+    assert not report.problems
+
+
 def test_the_romaji_note_from_the_spec_is_allowed(rules):
     _, report = lint_text("Имя (romaji: Kotonofuji — требует проверки) уточняется.", rules)
     assert not report.problems
