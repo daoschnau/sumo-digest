@@ -48,7 +48,7 @@ python -m sumo_digest.collect --dry-run  # только сбор корпуса,
 python -m sumo_digest.acceptance --latest # приёмка выпуска по чек-листу §7.3
 python scripts/check_sources.py          # живая проверка листингов (руками, не в CI)
 pytest                                   # тесты
-ruff check . && ruff format --check .    # линт
+ruff check .                             # линт (форматирование не навязывается)
 ```
 
 ## Переменные окружения
@@ -64,7 +64,7 @@ config/sources.yml         закрытый список источников
 config/translit_rules.yml  правила линтера транслитерации
 schema/digest.schema.json  контракт выходного JSON
 prompts/write.md           системный промпт писателя
-prompts/select.md          системный промпт отборщика
+prompts/select.md          НЕ используется: задачи шага select решены в collect.py
 prompts/translit_guide.md  руководство по транслитерации (§3 спецификации)
 src/sumo_digest/           collect, extract, llm, validate, render, state, run
 templates/                 issue.html, index.html, atom.xml
