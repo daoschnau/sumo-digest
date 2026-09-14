@@ -19,13 +19,18 @@ import anthropic
 from .models import Corpus, corpus_from_dict
 from .schema import api_schema, load_schema
 from .translit import LintReport, lint_digest, read_field, write_field
-from .validate import ValidationFailed, validate
+from .validate import MAX_BLOCKS, MIN_BLOCKS, ValidationFailed, validate
 
 WRITE_PROMPT = Path("prompts/write.md")
 TRANSLIT_GUIDE = Path("prompts/translit_guide.md")
 
 DEFAULT_MODEL = "claude-opus-5"
-MAX_TOKENS = 16000
+
+# Потолок ответа делится между рассуждением и текстом выпуска. На корпусе в
+# восемнадцать статей шестнадцати тысяч не хватило: ответ обрезало на середине
+# и выпуск пропал целиком. Запас берётся с двойным, платим всё равно только за
+# выданное — обычный выпуск укладывается в двенадцать тысяч.
+MAX_TOKENS = 32000
 
 
 def build_system() -> list[dict]:
@@ -59,7 +64,13 @@ def build_user_message(corpus: Corpus) -> str:
     return (
         f"Период выпуска: с {corpus.period_from} по {corpus.period_to}.\n"
         f"Дата выпуска: {corpus.period_to}.\n"
-        f"Источники и их доступность: {sources}.\n\n"
+        f"Источники и их доступность: {sources}.\n"
+        # Потолок блоков в схему для API не проходит (см. schema.api_schema),
+        # поэтому он сообщается здесь. Иначе модель узнаёт о нём только
+        # отказом валидатора, то есть уже потерянным выпуском.
+        f"Блоков в выпуске: от {MIN_BLOCKS} до {MAX_BLOCKS}. Если материала "
+        f"больше, объединять близкие сюжеты, а не дробить: лишние блоки код "
+        f"отбросит по значимости.\n\n"
         f"Статьи ({len(articles)}):\n"
         f"{json.dumps(articles, ensure_ascii=False, indent=1)}"
     )
@@ -173,7 +184,11 @@ def repair_transliteration(digest: dict, report: LintReport,
         if fixed.strip():
             write_field(digest, where, fixed.strip())
 
-    return lint_digest(digest)
+    fixed, fixed_report = lint_digest(digest)
+    # Перепроверка касается написания; замечания, которые линтер не выносит
+    # (например, отброшенные блоки), она не отменяет — переносим их дальше.
+    fixed_report.warnings = report.warnings + fixed_report.warnings
+    return fixed, fixed_report
 
 
 def main() -> int:

@@ -109,11 +109,36 @@ def block_order(block: dict) -> tuple[int, int, int]:
     Блоки без даты уходят вниз своей группы.
     """
     when = block.get("date")
+    try:
+        freshness = -date.fromisoformat(when).toordinal() if when else 0
+    except (TypeError, ValueError):
+        # Сортировка идёт до проверки схемы, поэтому дата здесь бывает любой.
+        # Кривую дату всё равно поймает check_facts; ронять сортировку голым
+        # ValueError незачем — блок просто уходит вниз своей группы.
+        freshness = 0
     return (
         -int(block.get("importance", 1)),
         CATEGORY_RANK.get(block.get("category", "other"), 9),
-        -date.fromisoformat(when).toordinal() if when else 0,
+        freshness,
     )
+
+
+def trim_blocks(digest: dict) -> tuple[dict, list[dict]]:
+    """Отсортировать и срезать хвост, если блоков больше потолка.
+
+    Потолок в схеме есть, а модель его не видит: structured outputs не
+    принимает maxItems, и в API уходит копия схемы без него. На корпусе в
+    восемнадцать статей модель написала двенадцать блоков, и выпуск упал на
+    проверке схемы — то есть из-за количества, а не из-за фактов.
+
+    Количество — не факт, и терять из-за него весь выпуск нельзя. Порядок
+    блоков всё равно определяет код (инвариант 5), так что и решение, какие
+    блоки лишние, принадлежит коду: после сортировки лишним оказывается
+    наименее значимое. Возвращаются выпуск и отброшенные блоки.
+    """
+    blocks = sorted(digest.get("blocks", []), key=block_order)
+    digest["blocks"], dropped = blocks[:MAX_BLOCKS], blocks[MAX_BLOCKS:]
+    return digest, dropped
 
 
 def sort_blocks(digest: dict) -> dict:
@@ -185,6 +210,10 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     # границами, а не с теми, которые модель назвала сама.
     digest = resolve_sources_reviewed(resolve_period(digest, corpus), corpus)
 
+    # До проверки схемы: потолок блоков модели не виден (см. trim_blocks),
+    # и перебор не должен доходить до жёсткого отказа.
+    digest, dropped = trim_blocks(digest)
+
     problems = check_schema(digest)
     if problems:
         raise ValidationFailed(problems)
@@ -196,5 +225,10 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     # Что делать с оставшимися замечаниями, решает вызывающий — обычно одна
     # попытка правки текста и публикация с записью в лог.
     digest, report = lint_digest(digest)
+    if dropped:
+        report.warnings.append(
+            f"блоков было {len(digest['blocks']) + len(dropped)}, оставлено "
+            f"{MAX_BLOCKS}; отброшено по значимости: "
+            + "; ".join(block.get("subtitle", "(без подзаголовка)") for block in dropped))
 
     return sort_blocks(resolve_sources(digest, corpus)), report

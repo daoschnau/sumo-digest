@@ -6,7 +6,13 @@ import pytest
 
 from sumo_digest.models import Article, Corpus, SourceStatus
 from sumo_digest.schema import api_schema, load_schema
-from sumo_digest.validate import ValidationFailed, check_facts, sort_blocks, validate
+from sumo_digest.validate import (
+    MAX_BLOCKS,
+    ValidationFailed,
+    check_facts,
+    sort_blocks,
+    validate,
+)
 
 URL_A = "https://hochi.news/articles/20260910-OHT1T51188.html"
 URL_B = "https://www.sponichi.co.jp/sports/news/2026/09/10/kiji/20260910s00005000296000c.html"
@@ -91,6 +97,35 @@ def test_too_few_blocks_needs_quiet_period(digest, corpus):
     assert any("quiet_period" in p for p in check_facts(digest, corpus))
     digest["quiet_period"] = True
     assert not check_facts(digest, corpus)
+
+
+def test_extra_blocks_are_trimmed_not_rejected(digest, corpus):
+    """Падение прогона 14.09.2026: двенадцать блоков вместо десяти.
+
+    Потолок модели не виден — structured outputs не принимает maxItems, —
+    и терять из-за перебора весь выпуск нельзя.
+    """
+    import copy as _copy
+
+    extra = _copy.deepcopy(digest["blocks"][0])
+    extra["importance"] = 1
+    extra["subtitle"] = "Наименее значимое"
+    digest["blocks"] = [_copy.deepcopy(digest["blocks"][0]) for _ in range(MAX_BLOCKS)]
+    digest["blocks"].extend([extra, _copy.deepcopy(extra)])
+
+    checked, report = validate(digest, corpus)
+
+    assert len(checked["blocks"]) == MAX_BLOCKS
+    assert all(block["subtitle"] != "Наименее значимое" for block in checked["blocks"])
+    assert any("отброшено по значимости" in note for note in report.warnings)
+
+
+def test_sorting_survives_a_malformed_date(digest, corpus):
+    """Сортировка идёт до схемы, поэтому кривая дата не должна её ронять."""
+    digest["blocks"][0]["date"] = "14 сентября"
+    # Голого ValueError быть не должно: дату забракует проверка формата.
+    with pytest.raises(ValidationFailed, match="не в формате"):
+        validate(digest, corpus)
 
 
 def test_schema_violation_is_caught(digest, corpus):
