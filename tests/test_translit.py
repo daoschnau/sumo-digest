@@ -207,3 +207,10 @@ def test_adjective_is_not_autofixed_but_handed_to_the_repair_pass(rules):
     assert fixed == "Макуутский Вакатакакаге снялся."
     assert not report.fixes
     assert report.problems
+
+
+def test_kun_reading_of_the_new_makuuchi_debutant_is_fixed(rules):
+    """寿 читается «тоши»: официальная романизация Toshinofuji побеждает кун-чтение."""
+    fixed, report = lint_text("Дебютант макуути Котобукинофуджи открыл счёт.", rules)
+    assert "Тошинофуджи" in fixed
+    assert ("Котобукинофуджи", "Тошинофуджи", 1) in report.fixes

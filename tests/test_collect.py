@@ -192,3 +192,81 @@ class RealCheckFetcher(Fetcher):
     def get(self, url: str) -> str | None:
         self.check_robots(url)
         return self.pages.get(url)
+
+
+def test_reserved_slot_lets_every_source_into_the_corpus(monkeypatch):
+    """Выпуск 14.09.2026 собрался из трёх изданий: приоритетные съели бюджет."""
+    from sumo_digest import collect as collect_module
+
+    pages = {}
+    sources = []
+    for number in range(1, 6):
+        source_id = f"s{number}"
+        listing = f"https://{source_id}.test/list"
+        links = [f"https://{source_id}.test/a{i}.html" for i in range(6)]
+        pages[listing] = "".join(f'<a href="{url}">x</a>' for url in links)
+        for index, url in enumerate(links):
+            pages[url] = (f"<html><head><title>{source_id} материал {index}</title>"
+                          '<meta property="article:published_time" '
+                          'content="2026-09-14T10:00:00+09:00"></head><body><article>'
+                          f"<h1>{source_id} материал {index}</h1><p>"
+                          + ("大相撲の取組は続いている。" * 40)
+                          + "</p></article></body></html>")
+        sources.append({"id": source_id, "name": source_id.upper(), "priority": number,
+                        "lang": "ja", "enabled": True, "listing_url": listing,
+                        "link_pattern": r"/a\d\.html"})
+
+    monkeypatch.setattr(collect_module.Fetcher, "get",
+                        lambda self, url: pages.get(url))
+    monkeypatch.setattr(collect_module.Fetcher, "check_robots", lambda self, url: None)
+
+    config = {"defaults": {"max_links_per_source": 10},
+              "budget": {"max_articles": 10, "max_articles_per_source": 4,
+                         "min_articles_per_source": 1},
+              "sources": sources}
+    corpus = collect_module.collect(config, State(last_issue_date="2026-09-10"),
+                                    date(2026, 9, 14))
+
+    used = {status.id: status.articles_used for status in corpus.sources}
+    assert all(count >= 1 for count in used.values()), f"источник без места: {used}"
+    # Бюджета 10 на пять источников хватает на резерв каждому (5) и на добор
+    # приоритетными: первый берёт полную квоту, второй — сколько осталось.
+    assert used["s1"] == 4, "первый по приоритету обязан добрать свою квоту"
+    assert used["s2"] > 1, "второй по приоритету должен весить больше резерва"
+    assert used["s5"] == 1, "последнему остаётся ровно зарезервированное место"
+    assert len(corpus.articles) == 10
+
+
+def test_without_a_reserve_the_priority_sources_take_everything(monkeypatch):
+    """Поведение до правки — оставлено тестом, чтобы регресс был виден."""
+    from sumo_digest import collect as collect_module
+
+    pages = {}
+    sources = []
+    for number in range(1, 6):
+        source_id = f"s{number}"
+        listing = f"https://{source_id}.test/list"
+        links = [f"https://{source_id}.test/a{i}.html" for i in range(6)]
+        pages[listing] = "".join(f'<a href="{url}">x</a>' for url in links)
+        for index, url in enumerate(links):
+            pages[url] = (f"<html><head><title>{source_id} материал {index}</title>"
+                          '<meta property="article:published_time" '
+                          'content="2026-09-14T10:00:00+09:00"></head><body><article>'
+                          f"<h1>{source_id} материал {index}</h1><p>"
+                          + ("大相撲の取組は続いている。" * 40)
+                          + "</p></article></body></html>")
+        sources.append({"id": source_id, "name": source_id.upper(), "priority": number,
+                        "lang": "ja", "enabled": True, "listing_url": listing,
+                        "link_pattern": r"/a\d\.html"})
+
+    monkeypatch.setattr(collect_module.Fetcher, "get", lambda self, url: pages.get(url))
+    monkeypatch.setattr(collect_module.Fetcher, "check_robots", lambda self, url: None)
+
+    config = {"defaults": {"max_links_per_source": 10},
+              "budget": {"max_articles": 8, "max_articles_per_source": 4,
+                         "min_articles_per_source": 0},
+              "sources": sources}
+    corpus = collect_module.collect(config, State(last_issue_date="2026-09-10"),
+                                    date(2026, 9, 14))
+    used = {status.id: status.articles_used for status in corpus.sources}
+    assert used["s3"] == 0, "без резерва третий источник не должен попасть"

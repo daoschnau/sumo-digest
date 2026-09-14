@@ -144,6 +144,7 @@ def collect(config: dict, state: State, today: date) -> Corpus:
     max_links = int(defaults.get("max_links_per_source", 15))
     max_articles = int(budget.get("max_articles", 12))
     per_source = int(budget.get("max_articles_per_source", max_articles))
+    reserve = int(budget.get("min_articles_per_source", 0))
 
     sources = sorted((s for s in config["sources"] if s.get("enabled", True)),
                      key=lambda s: s["priority"])
@@ -190,11 +191,15 @@ def collect(config: dict, state: State, today: date) -> Corpus:
         used[ref.source_id] = used.get(ref.source_id, 0) + 1
         return True
 
-    # Два прохода. Первый — с квотой на источник: без неё Sponichi с его
-    # пятнадцатью ссылками способен забрать весь бюджет, и Hochi, который
-    # по инварианту 3 обходится всегда и первым, не попадёт в выпуск вовсе.
-    # Второй добирает остаток, если в тихий день квоты не хватило на бюджет.
-    for pass_quota in (per_source, max_articles):
+    # Три прохода по возрастающей квоте. Первый раздаёт каждому источнику
+    # зарезервированное место: иначе приоритетные выбирают бюджет целиком
+    # и выпуск становится голосом двух-трёх изданий (14.09.2026). Второй даёт
+    # приоритетным добрать свою квоту — Sponichi и Hochi по инварианту 3 дают
+    # основную фактуру и должны весить больше. Третий добирает остаток,
+    # если в тихий день материала не хватило на бюджет.
+    for pass_quota in (reserve, per_source, max_articles):
+        if pass_quota <= 0:
+            continue
         for ref in pending:
             if len(articles) >= max_articles:
                 break

@@ -71,6 +71,7 @@ templates/                 issue.html, index.html, atom.xml
 data/state.json            дата прошлого выпуска + seen_urls
 data/new_terms.csv         накопитель новых транслитераций
 data/issues/*.json         архив выпусков; сайт пересобирается из него целиком
+docs/watchlist.md          борцы под наблюдением — заметки владельца, НЕ промпт
 site/                      результат рендеринга (GitHub Pages)
 ```
 
