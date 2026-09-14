@@ -82,7 +82,11 @@ def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL) -> tuple[dict, dict
     # с экспоненциальной паузой на 429 и 5xx — отдельный цикл ретраев не нужен.
     client = anthropic.Anthropic()
 
-    response = client.beta.messages.create(
+    # Потоком, а не одним ответом: SDK отказывается ждать дольше десяти минут
+    # без стрима, а с потолком в 32 тысячи токенов он считает запрос заведомо
+    # долгим и падает ValueError ещё до обращения к API. Ответ собирается
+    # целиком здесь же — остальной код по-прежнему видит готовое сообщение.
+    with client.beta.messages.stream(
         model=model,
         max_tokens=MAX_TOKENS,
         system=build_system(),
@@ -96,7 +100,8 @@ def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL) -> tuple[dict, dict
         # модель вместо того, чтобы уронить выпуск.
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
-    )
+    ) as stream:
+        response = stream.get_final_message()
 
     if response.stop_reason == "refusal":
         raise RuntimeError(f"модель отказалась отвечать: {response.stop_details}")
