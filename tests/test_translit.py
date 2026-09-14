@@ -214,3 +214,26 @@ def test_kun_reading_of_the_new_makuuchi_debutant_is_fixed(rules):
     fixed, report = lint_text("Дебютант макуути Котобукинофуджи открыл счёт.", rules)
     assert "Тошинофуджи" in fixed
     assert ("Котобукинофуджи", "Тошинофуджи", 1) in report.fixes
+
+
+def test_untranslated_japanese_term_is_caught(rules):
+    """Косяк выпуска 14.09.2026: «вошёл в立ち合и» вместо «вошёл в тачиай»."""
+    fixed, report = lint_text("Фуджинокава остро вошёл в立ち合い.", rules)
+    # Пробела перед иероглифами модель не ставит, поэтому заменой это не чинится.
+    assert fixed == "Фуджинокава остро вошёл в立ち合い."
+    assert not report.fixes
+    assert [p.rule for p in report.problems] == ["japanese_outside_parens"]
+
+
+def test_original_spelling_in_parentheses_stays_legal(rules):
+    """Иероглифы после имени — требование §3.2, а не нарушение."""
+    _, report = lint_text("Ёкодзуна Хошорю (豊昇龍) снялся с Аки Басё.", rules)
+    assert not report.problems
+
+
+def test_tochitaikai_is_fixed_in_every_case_form(rules):
+    """栃大海 — «тайкай»; правится основа, поэтому падежи ловятся тоже."""
+    fixed, _ = lint_text("Асахифуджи проиграл Точидайкаю, а Точидайкай пошёл дальше.",
+                         rules)
+    assert "Точидайка" not in fixed.replace("Точитайка", "")
+    assert fixed.count("Точитайка") == 2

@@ -24,6 +24,10 @@ RULES_PATH = Path("config/translit_rules.yml")
 # латиница внутри неё нарушением не считается.
 ROMAJI_NOTE = re.compile(r"\(\s*romaji:[^)]*\)")
 
+# Скобка после имени — единственное место, где оригинал написания уместен:
+# «Хошорю (豊昇龍)». Правило, проверяющее сам алфавит, смотрит текст без них.
+PARENTHESES = re.compile(r"\([^)]*\)")
+
 # Слова короче этого с каноническими именами не сверяем: на трёх-четырёх буквах
 # расстояние в единицу имеют десятки обычных слов.
 MIN_NAME_LENGTH = 6
@@ -102,6 +106,8 @@ def rejections(text: str, rules: dict, where: str = "") -> list[LintProblem]:
     problems: list[LintProblem] = []
     for rule in rules.get("reject", []):
         checked = ROMAJI_NOTE.sub("", text) if rule.get("allow_if_in_parens") else text
+        if rule.get("strip_all_parens"):
+            checked = PARENTHESES.sub("", checked)
         found = re.findall(rule["pattern"], checked)
         if found:
             sample = found[0] if isinstance(found[0], str) else found[0][0]
