@@ -53,3 +53,42 @@ def test_key_sources_stay_first_priority(sources_config):
         source = sources(sources_config)[source_id]
         assert source["enabled"] is True
         assert source["priority"] == 1
+
+
+SUMOSTOMP_DAY = "https://www.sumo-stomp.com/p/2026-aki-basho-day-3-results-and"
+SUMOSTOMP_FINAL = "https://www.sumo-stomp.com/p/2025-aki-basho-final-day-results"
+SUMOSTOMP_OTHER = "https://www.sumo-stomp.com/p/2026-aki-basho-predictions"
+
+
+def test_sumostomp_takes_day_reports_and_nothing_else(sources_config):
+    """Из этого источника берутся только отчёты о днях турнира, а не всё издание."""
+    pattern = re.compile(sources(sources_config)["sumostomp"]["link_pattern"])
+    assert pattern.search(SUMOSTOMP_DAY)
+    assert pattern.search(SUMOSTOMP_FINAL)
+    assert not pattern.search(SUMOSTOMP_OTHER)
+
+
+def test_sumostomp_is_bound_to_the_tournament(sources_config):
+    """Без only_during_basho источник хроники полез бы в выпуск в межсезонье."""
+    source = sources(sources_config)["sumostomp"]
+    assert source["only_during_basho"] is True
+    assert source["day_pattern"]
+    # Квота источника — дни турнира, а не статьи: период после пропущенного
+    # прогона бывает длиннее общей квоты в четыре статьи.
+    assert source["max_articles_per_source"] >= 4
+
+
+def test_only_tournament_sources_carry_the_flag(sources_config):
+    """Флаг выключает источник в межсезонье — на обычных изданиях это ошибка."""
+    flagged = {s["id"] for s in sources_config["sources"] if s.get("only_during_basho")}
+    assert flagged == {"sumostomp"}
+
+
+def test_day_pattern_agrees_with_link_pattern(sources_config):
+    """Номер дня обязан доставаться из любого адреса, прошедшего link_pattern."""
+    from sumo_digest.basho import day_from_url
+
+    source = sources(sources_config)["sumostomp"]
+    for url, day in ((SUMOSTOMP_DAY, 3), (SUMOSTOMP_FINAL, 15)):
+        assert re.search(source["link_pattern"], url)
+        assert day_from_url(url, source["day_pattern"]) == day

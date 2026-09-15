@@ -4,7 +4,13 @@ import copy
 
 import pytest
 
-from sumo_digest.models import Article, Corpus, SourceStatus
+from sumo_digest.models import (
+    Article,
+    BashoDay,
+    BashoWindow,
+    Corpus,
+    SourceStatus,
+)
 from sumo_digest.schema import api_schema, load_schema
 from sumo_digest.validate import (
     MAX_BLOCKS,
@@ -237,3 +243,92 @@ def test_a_date_that_is_not_a_date_is_caught_before_it_reaches_sorting(digest, c
     with pytest.raises(ValidationFailed) as failure:
         validate(digest, corpus)
     assert any("не в формате" in problem for problem in failure.value.problems)
+
+
+# --- турнирная часть выпуска ------------------------------------------------
+
+def basho_corpus(corpus: Corpus, reported: dict[int, str]) -> Corpus:
+    """Тот же корпус, но период приходится на первые дни турнира."""
+    corpus.period_from, corpus.period_to = "2026-09-13", "2026-09-15"
+    corpus.basho = BashoWindow(
+        id="2026-aki", name="Аки Басё", place="Токио, Рёгоку Кокугикан",
+        start="2026-09-13", end="2026-09-27",
+        days=[BashoDay(day=day, date=f"2026-09-{12 + day:02d}",
+                       article_id=reported.get(day)) for day in (1, 2, 3)])
+    return corpus
+
+
+def day_block(day: int, article_id: str) -> dict:
+    return {
+        "date": f"2026-09-{12 + day:02d}",
+        "subtitle": f"Аки Басё, день {day}: Оносато удержал единоличное первенство",
+        "body": "Оносато (大の里) взял верх над Хошорю (豊昇龍) приёмом осидаши. " * 2,
+        "category": "basho_day",
+        "importance": 5,
+        "source_ids": [article_id],
+    }
+
+
+def test_tournament_days_are_read_in_order_not_newest_first():
+    """Хроника — последовательность: третий день перед шестым, а не наоборот."""
+    blocks = [day_block(3, "a003"), day_block(1, "a001"), day_block(2, "a002")]
+    ordered = sort_blocks({"blocks": blocks})["blocks"]
+    assert [block["date"] for block in ordered] == ["2026-09-13", "2026-09-14", "2026-09-15"]
+
+
+def test_the_key_bout_leads_the_chronicle_and_both_lead_the_news():
+    """Две недели из шести турнир и есть новость — при равной значимости."""
+    news = {"date": "2026-09-15", "subtitle": "Бандзуке на Кюсю Басё", "body": "текст" * 20,
+            "category": "makuuchi_juryo", "importance": 5, "source_ids": ["a009"]}
+    bout = {"date": "2026-09-15", "subtitle": "Схватка дня: Оносато — Хошорю",
+            "body": "текст" * 20, "category": "basho_bout", "importance": 5,
+            "source_ids": ["a003"]}
+    ordered = sort_blocks({"blocks": [news, day_block(1, "a001"), bout]})["blocks"]
+    assert [block["category"] for block in ordered] == [
+        "basho_bout", "basho_day", "makuuchi_juryo"]
+
+
+def test_importance_still_beats_the_tournament_rubric():
+    """Снятие ёкодзуны важнее отчёта о рядовом дне: значимость первее рубрики."""
+    withdrawal = {"date": "2026-09-15", "subtitle": "Хошорю снялся с Аки Басё",
+                  "body": "текст" * 20, "category": "injury", "importance": 5,
+                  "source_ids": ["a009"]}
+    ordered = sort_blocks({"blocks": [dict(day_block(1, "a001"), importance=3),
+                                      withdrawal]})["blocks"]
+    assert [block["category"] for block in ordered] == ["injury", "basho_day"]
+
+
+def test_a_day_report_left_out_of_the_issue_is_reported_but_published(digest, corpus):
+    """Забытый день — замечание в лог, а не отказ: выпуск всё равно верен."""
+    corpus = basho_corpus(corpus, {1: "a001", 2: "a002"})
+    digest["blocks"] = ([day_block(1, "a001")]
+                        + [dict(day_block(2, "a002"), category="basho_bout")]
+                        + digest["blocks"][:4])
+    checked, report = validate(digest, corpus)
+    assert checked["blocks"], "выпуск публикуется"
+    assert any("день 2" in note for note in report.warnings)
+
+
+def test_a_missing_key_bout_is_reported(digest, corpus):
+    corpus = basho_corpus(corpus, {1: "a001"})
+    digest["blocks"] = [day_block(1, "a001")] + digest["blocks"][:4]
+    _, report = validate(digest, corpus)
+    assert any("главной схватке" in note for note in report.warnings)
+
+
+def test_two_key_bouts_are_reported(digest, corpus):
+    corpus = basho_corpus(corpus, {1: "a001"})
+    digest["blocks"] = [dict(day_block(1, "a001"), category="basho_bout"),
+                        dict(day_block(1, "a002"), category="basho_bout"),
+                        *digest["blocks"][:3]]
+    _, report = validate(digest, corpus)
+    assert any("схватке периода 2" in note for note in report.warnings)
+
+
+def test_tournament_blocks_outside_a_tournament_are_reported(digest, corpus):
+    """Между турнирами хроники быть не может: источник даже не обходится."""
+    assert corpus.basho is None
+    # Дата блока — из периода этого выпуска: проверяется рубрика, а не дата.
+    digest["blocks"][0] = dict(day_block(1, "a001"), date="2026-09-10")
+    _, report = validate(digest, corpus)
+    assert any("турнира в периоде нет" in note for note in report.warnings)

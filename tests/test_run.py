@@ -145,3 +145,36 @@ def test_new_terms_file_created_from_scratch_gets_a_header(tmp_path):
     assert first.startswith("original,"), "иначе DictReader прочитает данные как заголовок"
     # Второй прогон обязан узнать уже записанное имя.
     assert append_new_terms(digest, path) == 0
+
+
+def test_the_corpus_survives_the_trip_through_json_with_a_tournament():
+    """Шаг write читает корпус из файла: турнир обязан дожить до сообщения модели."""
+    from sumo_digest.models import BashoDay, BashoWindow, corpus_from_dict
+
+    corpus = Corpus(
+        period_from="2026-09-13", period_to="2026-09-15",
+        articles=[Article(id="a001", source_id="sumostomp", source_name="Sumo Stomp!",
+                          url="https://www.sumo-stomp.com/p/2026-aki-basho-day-1-results-and",
+                          title="Day 1", text="text" * 60, published="2026-09-13")],
+        sources=[],
+        basho=BashoWindow(id="2026-aki", name="Аки Басё", place="Токио",
+                          start="2026-09-13", end="2026-09-27",
+                          days=[BashoDay(1, "2026-09-13", "a001"),
+                                BashoDay(2, "2026-09-14", None)]),
+    )
+    restored = corpus_from_dict(json.loads(json.dumps(corpus.as_dict())))
+    assert restored.basho.name == "Аки Басё"
+    assert [(day.day, day.article_id) for day in restored.basho.days] == [
+        (1, "a001"), (2, None)]
+    # Опись, которая уходит в артефакты, тоже знает о турнире — но текстов в ней нет.
+    meta = corpus.as_meta_dict()
+    assert meta["basho"]["days"][0]["article_id"] == "a001"
+    assert "text" not in meta["articles"][0]
+
+
+def test_a_corpus_without_a_tournament_restores_as_none():
+    from sumo_digest.models import corpus_from_dict
+
+    corpus = Corpus(period_from="2026-08-03", period_to="2026-08-07")
+    assert corpus.as_dict()["basho"] is None
+    assert corpus_from_dict(json.loads(json.dumps(corpus.as_dict()))).basho is None

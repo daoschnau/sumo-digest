@@ -18,15 +18,27 @@ from .schema import load_schema
 from .translit import LintReport, lint_digest
 
 # Порядок значимости из спецификации: макуути и дзюрё → бандзуке → травмы →
-# тренировки → низшие дивизионы → прочее.
+# тренировки → низшие дивизионы → прочее. Турнирные рубрики стоят перед ними:
+# две недели из шести турнир и есть новость, и внутри одной значимости главная
+# схватка периода читается раньше хроники дней, а хроника — раньше прочего.
 CATEGORY_RANK = {
-    "makuuchi_juryo": 0,
-    "banzuke": 1,
-    "injury": 2,
-    "training": 3,
-    "lower_divisions": 4,
-    "other": 5,
+    "basho_bout": 0,
+    "basho_day": 1,
+    "makuuchi_juryo": 2,
+    "banzuke": 3,
+    "injury": 4,
+    "training": 5,
+    "lower_divisions": 6,
+    "other": 7,
 }
+
+# Рубрики, существующие только на время басё. Между турнирами их в выпуске быть
+# не может: источник хроники в межсезонье не обходится вовсе.
+BASHO_CATEGORIES = frozenset({"basho_bout", "basho_day"})
+
+# Дни турнира читаются по возрастанию: третий день перед шестым. Для остальных
+# блоков первее свежесть — это сводка новостей, а не хроника.
+CHRONOLOGICAL = frozenset({"basho_day"})
 
 MIN_BLOCKS = 5
 MAX_BLOCKS = 10
@@ -99,6 +111,39 @@ def check_facts(digest: dict, corpus: Corpus) -> list[str]:
     return problems
 
 
+def check_tournament(digest: dict, corpus: Corpus) -> list[str]:
+    """Замечания о турнирной части выпуска. Публикацию не останавливают.
+
+    Отказать здесь было бы неверно: ни одно из этих замечаний не делает выпуск
+    ложным. Выпуск, в котором модель забыла блок о главной схватке, лучше, чем
+    ноль вместо выпуска, — та же политика, что с транслитерацией. Но видеть
+    их нужно: по ним и станет понятно, что промпт разъезжается.
+    """
+    notes: list[str] = []
+    categories = [block.get("category") for block in digest.get("blocks", [])]
+
+    if corpus.basho is None:
+        stray = sorted({c for c in categories if c in BASHO_CATEGORIES})
+        if stray:
+            notes.append(f"турнира в периоде нет, а блоки с рубриками "
+                         f"{', '.join(stray)} в выпуске есть")
+        return notes
+
+    cited = {article_id for block in digest.get("blocks", [])
+             if block.get("category") == "basho_day"
+             for article_id in block.get("source_ids", [])}
+    missing = [day for day in corpus.basho.reported_days if day.article_id not in cited]
+    if missing:
+        notes.append("дни турнира с отчётом в корпусе, но без блока: "
+                     + "; ".join(f"день {day.day} ({day.article_id})" for day in missing))
+
+    bouts = categories.count("basho_bout")
+    if bouts != 1:
+        notes.append(f"блоков о главной схватке периода {bouts}, нужен ровно один")
+
+    return notes
+
+
 def block_order(block: dict) -> tuple[int, int, int]:
     """Ключ сортировки: значимость, потом категория, потом свежесть.
 
@@ -107,18 +152,28 @@ def block_order(block: dict) -> tuple[int, int, int]:
     выше снятия ёкодзуны (находка приёмки 10.09.2026). Поэтому первым идёт
     `importance`: что важнее, решает содержание, а не рубрика.
     Блоки без даты уходят вниз своей группы.
+
+    Исключение — хроника дней турнира: она читается по возрастанию, потому что
+    это последовательность, а не лента. Третий день перед шестым, а не наоборот.
     """
     when = block.get("date")
+    category = block.get("category", "other")
     try:
-        freshness = -date.fromisoformat(when).toordinal() if when else 0
+        ordinal = date.fromisoformat(when).toordinal() if when else 0
     except (TypeError, ValueError):
         # Сортировка идёт до проверки схемы, поэтому дата здесь бывает любой.
         # Кривую дату всё равно поймает check_facts; ронять сортировку голым
         # ValueError незачем — блок просто уходит вниз своей группы.
-        freshness = 0
+        ordinal = 0
+    if not ordinal:
+        # Дня турнира без даты быть не должно, но если он такой пришёл — вниз
+        # своей группы, как и все остальные блоки без даты.
+        freshness = date.max.toordinal() if category in CHRONOLOGICAL else 0
+    else:
+        freshness = ordinal if category in CHRONOLOGICAL else -ordinal
     return (
         -int(block.get("importance", 1)),
-        CATEGORY_RANK.get(block.get("category", "other"), 9),
+        CATEGORY_RANK.get(category, 9),
         freshness,
     )
 
@@ -225,6 +280,8 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     # Что делать с оставшимися замечаниями, решает вызывающий — обычно одна
     # попытка правки текста и публикация с записью в лог.
     digest, report = lint_digest(digest)
+    # Турнирная часть — тоже замечания, а не отказ: см. check_tournament.
+    report.warnings.extend(check_tournament(digest, corpus))
     if dropped:
         report.warnings.append(
             f"блоков было {len(digest['blocks']) + len(dropped)}, оставлено "

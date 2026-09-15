@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 import httpx
 import yaml
 
+from .basho import Basho, basho_window, current_basho, day_from_url, load_calendar
 from .extract import extract_article, is_fresh
 from .links import find_links, robots_parser
 from .models import Article, ArticleRef, Corpus, SourceStatus
@@ -132,7 +133,27 @@ def about_sumo(article: Article, keywords: list[str]) -> bool:
     return any(word.casefold() in haystack for word in keywords)
 
 
-def collect(config: dict, state: State, today: date) -> Corpus:
+def tournament_reports(articles: list[Article], by_id: dict[str, dict]) -> dict[int, str]:
+    """Дни турнира, о которых в корпусе есть отчёт: номер дня → id статьи.
+
+    Номер дня — из адреса статьи (`day_pattern` источника), а не из текста
+    и не из ответа модели. Если издание почему-то выдало два отчёта об одном
+    дне, остаётся первый: листинг идёт от новых к старым, и первым лежит
+    свежий разбор, а не уточнённый задним числом.
+    """
+    reports: dict[int, str] = {}
+    for article in articles:
+        pattern = by_id[article.source_id].get("day_pattern")
+        if not pattern:
+            continue
+        day = day_from_url(article.url, pattern)
+        if day is not None:
+            reports.setdefault(day, article.id)
+    return reports
+
+
+def collect(config: dict, state: State, today: date,
+            calendar: list[Basho] | None = None) -> Corpus:
     """Полный обход: источники по приоритету, затем бюджет корпуса."""
     defaults = config.get("defaults", {})
     budget = config.get("budget", {})
@@ -146,7 +167,24 @@ def collect(config: dict, state: State, today: date) -> Corpus:
     per_source = int(budget.get("max_articles_per_source", max_articles))
     reserve = int(budget.get("min_articles_per_source", 0))
 
-    sources = sorted((s for s in config["sources"] if s.get("enabled", True)),
+    # Идёт ли турнир — знает календарь, а не модель и не эвристика по заголовкам.
+    tournament = current_basho(load_calendar() if calendar is None else calendar,
+                               state.last_issue_date, today.isoformat())
+
+    # Источник с only_during_basho между турнирами не обходится вовсе: у Sumo
+    # Stomp! единица материала — день басё, и в межсезонье оттуда брать нечего.
+    # Такой источник не попадает и в перечень просмотренных: «просмотрено
+    # N источников» — проверяемое утверждение о прогоне, и записывать туда
+    # издание, к которому не ходили, значит врать в строке периода.
+    off_season = [] if tournament else [
+        source["id"] for source in config["sources"]
+        if source.get("enabled", True) and source.get("only_during_basho")]
+    if off_season:
+        print(f"турнира в периоде нет: не обходим {', '.join(off_season)}",
+              file=sys.stderr)
+
+    sources = sorted((s for s in config["sources"] if s.get("enabled", True)
+                      and s["id"] not in off_season),
                      key=lambda s: s["priority"])
     by_id = {source["id"]: source for source in sources}
 
@@ -203,7 +241,15 @@ def collect(config: dict, state: State, today: date) -> Corpus:
         for ref in pending:
             if len(articles) >= max_articles:
                 break
-            take(ref, pass_quota)
+            # Источник может назначить себе квоту сам — `max_articles_per_source`
+            # в его собственном блоке конфига, — и она действует с первого
+            # прохода. У Sumo Stomp! единица материала не статья, а день
+            # турнира: зарезервированное «одно место» для него значит потерянную
+            # хронику, потому что приоритетные разберут бюджет во втором проходе
+            # раньше, чем он дойдёт до второго дня. Общий бюджет корпуса это
+            # не поднимает, только долю источника в нём.
+            own = by_id[ref.source_id].get("max_articles_per_source")
+            take(ref, max(pass_quota, int(own)) if own else pass_quota)
         if len(articles) >= max_articles:
             break
 
@@ -221,8 +267,13 @@ def collect(config: dict, state: State, today: date) -> Corpus:
                     status.note = note
             print(f"ВНИМАНИЕ: {source['id']} — {note}", file=sys.stderr)
 
+    window = None
+    if tournament is not None:
+        window = basho_window(tournament, state.last_issue_date, today.isoformat(),
+                              tournament_reports(articles, by_id))
+
     return Corpus(period_from=state.last_issue_date, period_to=today.isoformat(),
-                  articles=articles, sources=statuses)
+                  articles=articles, sources=statuses, basho=window)
 
 
 def main() -> int:
@@ -238,6 +289,11 @@ def main() -> int:
     corpus = collect(config, state, date.today())
 
     print(f"период: {corpus.period_from} — {corpus.period_to}")
+    if corpus.basho:
+        listed = ", ".join(f"{day.day} → {day.article_id or 'отчёта нет'}"
+                           for day in corpus.basho.days)
+        print(f"турнир: {corpus.basho.name} ({corpus.basho.start} — "
+              f"{corpus.basho.end}); дни периода: {listed}")
     print(f"{'источник':<16} {'ссылок':>7} {'статей':>7}  статус")
     for status in corpus.sources:
         print(f"{status.id:<16} {status.links_found:>7} {status.articles_used:>7}  {status.status}")

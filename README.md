@@ -58,6 +58,12 @@ GitHub Actions (cron, пн/чт)
 несуществующий URL — самая дорогая ошибка такой системы: читатель идёт проверить факт
 и упирается в 404.
 
+**Турнир — состояние системы, а не догадка модели.** Даты хонбасё лежат
+в `config/basho.yml`, и от них зависит, обходится ли Sumo Stomp!: этот источник
+даёт отчёты о днях турнира и разбор схваток, и между турнирами брать из него
+нечего. «Идёт ли сейчас басё» — проверяемый факт, поэтому отвечает на него
+календарь, а не модель и не эвристика по заголовкам.
+
 **Транслитерация проверяется кодом.** По §8 спецификации это главный источник ошибок.
 Раздел 3.4 фактически описывает линтер, и он сделан детерминированным
 (`config/translit_rules.yml`): однозначные ошибки чинятся автозаменой с записью в лог,
@@ -69,12 +75,13 @@ GitHub Actions (cron, пн/чт)
 
 ```
 config/sources.yml           закрытый список источников: приоритет, листинг, link_pattern
+config/basho.yml             календарь хонбасё: от него зависят источники only_during_basho
 config/translit_rules.yml    правила линтера: autofix / reject / warn + канонические имена
 schema/digest.schema.json    контракт выходного JSON
 prompts/write.md             системный промпт писателя выпуска
 prompts/select.md            промпт отборщика; шаг не реализован, файл кодом не читается
 prompts/translit_guide.md    §3 спецификации отдельным файлом
-src/sumo_digest/             collect, extract, llm, validate, render, state, run, acceptance
+src/sumo_digest/             collect, extract, basho, llm, validate, render, state, run, acceptance
 templates/                   issue.html, index.html, atom.xml, style.css
 site/                        результат рендеринга (GitHub Pages)
 tests/                       фикстуры вместо сети; scripts/check_sources.py — живая проверка

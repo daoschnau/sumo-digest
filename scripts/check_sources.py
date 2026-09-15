@@ -19,19 +19,28 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import date
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 import yaml
 
+from sumo_digest.basho import current_basho, load_calendar
 from sumo_digest.links import ABSOLUTE_URL, QUOTED_PATH, PageLinks, normalize_url, robots_allows
 
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "sources.yml"
+BASHO = Path(__file__).resolve().parent.parent / "config" / "basho.yml"
 MIN_LINKS = 5  # критерий готовности E0 из ROADMAP.md
 
 FEEDISH = re.compile(r"(rss|atom|feed|\.xml)", re.IGNORECASE)
 API_LIKE = re.compile(r"(/api/|\.json|graphql|wp-json|/feed|rss)", re.IGNORECASE)
+
+
+def tournament_today() -> bool:
+    """Идёт ли турнир сегодня — по тому же календарю, что и в боевом прогоне."""
+    today = date.today().isoformat()
+    return current_basho(load_calendar(BASHO), today, today) is not None
 
 
 def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
@@ -43,6 +52,8 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
 
     print(f"\n=== {source['id']}  ({name}, приоритет {source['priority']})")
     print(f"    {url}")
+    if source.get("only_during_basho"):
+        print("    источник только на время турнира: вне басё пустой листинг — норма")
 
     try:
         response = httpx.get(url, timeout=timeout, follow_redirects=True,
@@ -150,11 +161,18 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     verdict = {True: "разрешает", False: "ЗАПРЕЩАЕТ", None: "нет данных"}[allowed]
     print(f"    robots.txt: {verdict}")
 
+    # Критерий E0 — не меньше MIN_LINKS ссылок — к источнику хроники применим
+    # только во время турнира: между басё отчётов о днях не выходит, и старые
+    # с фида уходят. Требовать от него пять ссылок в межсезонье значит выдумать
+    # проблему и отправить владельца чинить исправный шаблон.
+    if source.get("only_during_basho") and not tournament_today():
+        return f"вне турнира, ссылок {len(matched)} — не показатель", len(matched)
     if not matched:
         return "0 ссылок — чинить link_pattern", 0
     if len(matched) < MIN_LINKS:
         return f"мало ссылок ({len(matched)})", len(matched)
     return "ок", len(matched)
+
 
 
 def probe(url: str, defaults: dict) -> None:

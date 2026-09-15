@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from .basho import current_basho, load_calendar
 from .render import ISSUES
 from .translit import lint_digest
 from .validate import MAX_BLOCKS, MIN_BLOCKS, block_order
@@ -60,6 +61,13 @@ def allowed_hosts(path: Path = SOURCES) -> set[str]:
     return hosts
 
 
+def basho_sources(path: Path = SOURCES) -> set[str]:
+    """Названия источников, которые обходятся только на время турнира."""
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return {source["name"] for source in config["sources"]
+            if source.get("only_during_basho")}
+
+
 def sentences(text: str) -> int:
     return len([part for part in re.split(r"[.!?]+", text) if part.strip()])
 
@@ -83,6 +91,29 @@ def check_issue(issue: dict) -> list[Check]:
 
     order = [block_order(block) for block in blocks]
     checks.append(Check("Блоки отсортированы по значимости", order == sorted(order)))
+
+    # Турнирная часть. Корпуса у приёмки нет, поэтому она судит по проверяемым
+    # фактам о самом выпуске: календарю турниров и перечню просмотренных
+    # источников. Спрашивать хронику дней у выпуска, которому её взять было
+    # негде — источник не открылся или его тогда ещё не было в списке, —
+    # значит проваливать верный выпуск.
+    period = issue.get("period") or {}
+    tournament = current_basho(load_calendar(), period.get("from", ""), period.get("to", ""))
+    categories = [block.get("category") for block in blocks]
+    days, bouts = categories.count("basho_day"), categories.count("basho_bout")
+    tournament_only = basho_sources()
+    chronicle = [source for source in issue.get("sources_reviewed", [])
+                 if source["name"] in tournament_only
+                 and source.get("articles_used", 0) > 0]
+    if tournament and chronicle:
+        checks.append(Check(f"{tournament.name}: хроника дней и ровно одна главная схватка",
+                            days > 0 and bouts == 1, f"дней: {days}, схваток: {bouts}"))
+    elif tournament:
+        checks.append(Check(f"{tournament.name}: хроника дней", None,
+                            "источник хроники в корпус ничего не дал — проверять нечего"))
+    else:
+        checks.append(Check("Вне турнира турнирных блоков нет", days + bouts == 0,
+                            f"дней: {days}, схваток: {bouts}" if days + bouts else ""))
 
     used: dict[str, int] = {}
     for block in blocks:

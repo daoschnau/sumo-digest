@@ -32,3 +32,16 @@ def test_navigation_links_are_not_articles(fixture_html):
 def test_normalize_drops_query_and_fragment():
     assert normalize_url("https://a.jp/x.html?utm=1#top") == "https://a.jp/x.html"
     assert url_key("https://a.jp/x.html?utm=1") == url_key("https://a.jp/x.html")
+
+
+def test_substack_feed_gives_only_day_reports(fixture_html, sources_config):
+    """Листингом у Sumo Stomp! служит фид: адреса в нём лежат текстом, не в <a>."""
+    source = next(s for s in sources_config["sources"] if s["id"] == "sumostomp")
+    links = find_links(fixture_html("listings/sumostomp.xml"),
+                       source["listing_url"], source["link_pattern"])
+    assert links == [
+        "https://www.sumo-stomp.com/p/2026-aki-basho-day-3-results-and",
+        "https://www.sumo-stomp.com/p/2026-aki-basho-day-2-results-and",
+        "https://www.sumo-stomp.com/p/2026-aki-basho-day-1-results-and",
+        "https://www.sumo-stomp.com/p/2026-nagoya-basho-final-day-results",
+    ]

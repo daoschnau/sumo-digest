@@ -117,3 +117,45 @@ def test_closed_list_hosts_come_from_the_config():
     assert "hochi.news" in hosts, "канонический хост Hochi обязан быть разрешён"
     assert "www.sponichi.co.jp" in hosts
     assert not any("asahi" in host or "nikkei" in host for host in hosts)
+
+
+# --- турнирная часть --------------------------------------------------------
+
+def during_aki(issue: dict, *, chronicle: bool) -> dict:
+    """Тот же выпуск, но его период приходится на дни Аки Басё 2026."""
+    issue["period"] = {"from": "2026-09-14", "to": "2026-09-16"}
+    issue["issue_date"] = "2026-09-16"
+    if chronicle:
+        issue["sources_reviewed"].append(
+            {"name": "Sumo Stomp!", "status": "ok", "articles_used": 2})
+    return issue
+
+
+def test_during_a_tournament_the_chronicle_is_required(issue):
+    issue = during_aki(issue, chronicle=True)
+    assert result(issue, "Аки Басё").passed is False
+
+    issue["blocks"][0]["category"] = "basho_day"
+    issue["blocks"][1]["category"] = "basho_bout"
+    assert result(issue, "Аки Басё").passed is True
+
+
+def test_two_key_bouts_fail_the_checklist(issue):
+    issue = during_aki(issue, chronicle=True)
+    issue["blocks"][0]["category"] = "basho_day"
+    issue["blocks"][1]["category"] = "basho_bout"
+    issue["blocks"][2]["category"] = "basho_bout"
+    assert result(issue, "Аки Басё").passed is False
+
+
+def test_a_tournament_issue_without_the_source_is_not_judged(issue):
+    """Выпуску, которому хронику взять было негде, её отсутствие не в укор."""
+    issue = during_aki(issue, chronicle=False)
+    assert result(issue, "Аки Басё").passed is None
+
+
+def test_outside_a_tournament_the_chronicle_must_be_absent(issue):
+    """Период выпуска-фикстуры — межсезонье: турнирных рубрик в нём быть не может."""
+    assert result(issue, "Вне турнира").passed is True
+    issue["blocks"][0]["category"] = "basho_day"
+    assert result(issue, "Вне турнира").passed is False

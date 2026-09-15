@@ -16,7 +16,7 @@ from pathlib import Path
 
 import anthropic
 
-from .models import Corpus, corpus_from_dict
+from .models import BashoWindow, Corpus, corpus_from_dict
 from .schema import api_schema, load_schema
 from .translit import LintReport, lint_digest, read_field, write_field
 from .validate import MAX_BLOCKS, MIN_BLOCKS, ValidationFailed, validate
@@ -47,6 +47,40 @@ def build_system() -> list[dict]:
     ]
 
 
+def tournament_brief(basho: BashoWindow) -> str:
+    """Часть пользовательского сообщения про идущий турнир.
+
+    Живёт здесь, а не в prompts/write.md, по той же причине, что и потолок
+    блоков: это обстоятельство прогона, а не правило стиля. Между турнирами
+    этого абзаца в сообщении нет вовсе — и выпуск про дни турнира не пишет,
+    потому что и материала о них в корпусе нет.
+
+    Дни перечисляются вместе с идентификатором отчёта: день без отчёта модель
+    обязана пропустить. Номер дня при этом посчитан кодом по адресу статьи,
+    а не взят из текста — «третий день» в японской заметке легко оказывается
+    третьим днём прошлого басё.
+    """
+    days = "\n".join(
+        f"  день {day.day} ({day.date}) — "
+        + (f"отчёт в статье {day.article_id}" if day.article_id
+           else "отчёта в корпусе нет, писать о нём нечего")
+        for day in basho.days)
+    return (
+        f"\nИдёт {basho.name}, {basho.place}: {basho.start} — {basho.end}.\n"
+        f"Дни турнира, попавшие в период:\n{days}\n"
+        f"Поэтому в этом выпуске, помимо обычных блоков:\n"
+        f"- на каждый день, у которого есть отчёт, — отдельный блок "
+        f"с category=basho_day: итог дня, кто вышел вперёд, кто из верхушки "
+        f"проиграл, каким приёмом решались главные схватки. Дату блока ставить "
+        f"по дню турнира. День без отчёта не описывать вовсе.\n"
+        f"- ровно один блок с category=basho_bout — самая важная схватка "
+        f"периода: кто с кем, чем закончилась, почему именно она важнее "
+        f"остальных. Схватку брать из отчётов о днях, а не из общих новостей.\n"
+        f"- порядок этих блоков расставит код: дни он поставит по возрастанию, "
+        f"переставлять их самому не нужно.\n"
+    )
+
+
 def build_user_message(corpus: Corpus) -> str:
     sources = ", ".join(f"{s.name} — {s.status}" for s in corpus.sources)
     articles = [
@@ -70,8 +104,9 @@ def build_user_message(corpus: Corpus) -> str:
         # отказом валидатора, то есть уже потерянным выпуском.
         f"Блоков в выпуске: от {MIN_BLOCKS} до {MAX_BLOCKS}. Если материала "
         f"больше, объединять близкие сюжеты, а не дробить: лишние блоки код "
-        f"отбросит по значимости.\n\n"
-        f"Статьи ({len(articles)}):\n"
+        f"отбросит по значимости.\n"
+        + (tournament_brief(corpus.basho) if corpus.basho else "")
+        + f"\nСтатьи ({len(articles)}):\n"
         f"{json.dumps(articles, ensure_ascii=False, indent=1)}"
     )
 

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Фид Substack по структуре реального: у издания листингом служит он, а не
+     /archive (страница рисуется скриптом). Сокращено: у items оставлены
+     title, link, pubDate. Порядок — от новых к старым, как в живом фиде. -->
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Sumo Stomp!</title>
+    <link>https://www.sumo-stomp.com</link>
+    <atom:link href="https://www.sumo-stomp.com/feed" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>2026 Aki Basho: Day 3 results and analysis</title>
+      <link>https://www.sumo-stomp.com/p/2026-aki-basho-day-3-results-and</link>
+      <pubDate>Tue, 15 Sep 2026 14:02:11 GMT</pubDate>
+    </item>
+    <item>
+      <title>2026 Aki Basho: Day 2 results and analysis</title>
+      <link>https://www.sumo-stomp.com/p/2026-aki-basho-day-2-results-and?utm_source=feed</link>
+      <pubDate>Mon, 14 Sep 2026 13:40:02 GMT</pubDate>
+    </item>
+    <item>
+      <title>2026 Aki Basho: Day 1 results and analysis</title>
+      <link>https://www.sumo-stomp.com/p/2026-aki-basho-day-1-results-and</link>
+      <pubDate>Sun, 13 Sep 2026 15:11:47 GMT</pubDate>
+    </item>
+    <item>
+      <title>2026 Aki basho predictions!</title>
+      <link>https://www.sumo-stomp.com/p/2026-aki-basho-predictions</link>
+      <pubDate>Fri, 11 Sep 2026 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>2026 Nagoya Basho: Final Day results and analysis</title>
+      <link>https://www.sumo-stomp.com/p/2026-nagoya-basho-final-day-results</link>
+      <pubDate>Sun, 26 Jul 2026 16:20:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Sumo Stomp! podcast: the banzuke, explained</title>
+      <link>https://www.sumo-stomp.com/p/sumo-stomp-podcast-banzuke-explained</link>
+      <pubDate>Wed, 08 Jul 2026 09:30:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

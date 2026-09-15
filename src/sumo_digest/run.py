@@ -17,6 +17,7 @@ from pathlib import Path
 
 import yaml
 
+from .basho import calendar_warning, load_calendar
 from .collect import CONFIG_PATH, collect
 from .llm import DEFAULT_MODEL, repair_transliteration, write_digest
 from .models import Corpus
@@ -161,7 +162,15 @@ def main() -> int:
 
     print(f"1. collect · период с {state.last_issue_date}")
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
-    corpus = collect(config, state, today)
+    # Календарь турниров загружается здесь, рядом с конфигом источников: от него
+    # зависит, обходится ли источник хроники, и предупреждение о кончающемся
+    # календаре должно попасть не только в лог, но и в отчёт о прогоне.
+    calendar = load_calendar()
+    stale = calendar_warning(calendar, today)
+    if stale:
+        print(f"   ВНИМАНИЕ: {stale}", file=sys.stderr)
+        report["basho_calendar_warning"] = stale
+    corpus = collect(config, state, today, calendar)
     if options.ignore_seen:
         state.seen_urls = seen_before
     save_corpus(corpus)
@@ -169,8 +178,13 @@ def main() -> int:
     report["period"] = {"from": corpus.period_from, "to": corpus.period_to}
     report["sources"] = [s.as_dict() for s in corpus.sources]
     report["corpus_articles"] = len(corpus.articles)
+    report["basho"] = corpus.basho.as_dict() if corpus.basho else None
     for status in corpus.sources:
         print(f"   {status.id:<14} {status.links_found:>4} ссылок  {status.status}")
+    if corpus.basho:
+        listed = ", ".join(f"{day.day} → {day.article_id or 'отчёта нет'}"
+                           for day in corpus.basho.days)
+        print(f"   турнир: {corpus.basho.name}; дни периода: {listed}")
     if not corpus.articles:
         report["failed"] = "пустой корпус"
         save_report(report)
