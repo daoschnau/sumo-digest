@@ -45,3 +45,17 @@ def test_substack_feed_gives_only_day_reports(fixture_html, sources_config):
         "https://www.sumo-stomp.com/p/2026-aki-basho-day-1-results-and",
         "https://www.sumo-stomp.com/p/2026-nagoya-basho-final-day-results",
     ]
+
+
+def test_comment_pages_do_not_become_day_reports(fixture_html, sources_config):
+    """Проверка 15.09.2026 на живом фиде: 45 совпадений вместо пятнадцати.
+
+    У каждого отчёта фид отдаёт ещё страницу комментариев и тот же адрес
+    внутри экранированного JSON. Без закреплённого конца адреса один день
+    турнира приходил бы в корпус трижды.
+    """
+    source = next(s for s in sources_config["sources"] if s["id"] == "sumostomp")
+    links = find_links(fixture_html("listings/sumostomp.xml"),
+                       source["listing_url"], source["link_pattern"])
+    assert not any("/comments" in link or "quot" in link for link in links)
+    assert len(links) == len(set(links))

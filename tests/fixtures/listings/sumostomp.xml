@@ -11,6 +11,11 @@
       <title>2026 Aki Basho: Day 3 results and analysis</title>
       <link>https://www.sumo-stomp.com/p/2026-aki-basho-day-3-results-and</link>
       <pubDate>Tue, 15 Sep 2026 14:02:11 GMT</pubDate>
+      <!-- Фид кладёт рядом с отчётом страницу комментариев и тот же адрес
+           внутри экранированного JSON. На живом прогоне 15.09.2026 из-за них
+           выходило 45 совпадений вместо пятнадцати. -->
+      <description>&lt;a href="https://www.sumo-stomp.com/p/2026-aki-basho-day-3-results-and/comments"&gt;Leave a comment&lt;/a&gt;</description>
+      <content>{"url":"https://www.sumo-stomp.com/p/2026-aki-basho-day-3-results-and/comments&amp;quot;,&amp;quot;text&amp;quot;:&amp;quot;Leave"}</content>
     </item>
     <item>
       <title>2026 Aki Basho: Day 2 results and analysis</title>
