@@ -58,9 +58,23 @@ def test_blocks_out_of_order_fail(issue):
     assert result(issue, "Блоки отсортированы").passed is False
 
 
-def test_one_article_in_two_blocks_fails(issue):
+def test_a_block_that_adds_no_source_of_its_own_fails(issue):
+    """Признак дробления: второму блоку писать о том же событии было нечем."""
     issue["blocks"][1]["source_ids"] = issue["blocks"][0]["source_ids"]
     assert result(issue, "Нет дублей").passed is False
+
+
+def test_a_roundup_feeding_several_blocks_passes(issue):
+    """Сводка дня описывает десяток схваток: три блока о трёх событиях законны.
+
+    До 17.09.2026 приёмка валила это как дубль и проваливала верные выпуски
+    14.09 и 17.09 — проверка была строже требования спецификации.
+    """
+    for number in range(3):
+        issue["blocks"][number]["source_ids"] = ["a000", f"a10{number}"]
+    assert result(issue, "Нет дублей").passed is True
+    # Но человеку список общих статей показать нужно.
+    assert "a000 → блоки 1, 2, 3" in result(issue, "Одна новость — один блок по смыслу").detail
 
 
 def test_missing_missed_section_fails(issue):
@@ -112,9 +126,13 @@ def test_human_items_are_never_marked_passed(issue):
     # Четыре пункта о стиле и смысле код не видит вовсе — «глазами». Пятый,
     # об утверждениях исключительности, он находит, но судить не может:
     # там вместо «глазами» лежит список найденных фраз.
-    listed = [check for check in human if check.item.startswith("Утверждения")]
-    assert len(listed) == 1
-    assert [check.detail for check in human if check not in listed] == ["глазами"] * 4
+    # Два пункта код находит сам, но судить не может, и вместо «глазами»
+    # кладёт в них найденное: утверждения об исключительности и статьи,
+    # попавшие в несколько блоков.
+    listed = [check for check in human
+              if check.item.startswith(("Утверждения", "Одна новость"))]
+    assert len(listed) == 2
+    assert [check.detail for check in human if check not in listed] == ["глазами"] * 3
 
 
 def test_closed_list_hosts_come_from_the_config():

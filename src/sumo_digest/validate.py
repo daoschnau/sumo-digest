@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import itertools
 import re
 from datetime import date, timedelta
 
@@ -95,6 +96,45 @@ def check_completeness_claims(digest: dict) -> list[str]:
         if found:
             notes.append(f"блок {number}: утверждение о полноте — "
                          f"«{'», «'.join(found)}»; сверить с источником")
+    return notes
+
+
+# Пары рубрик, которым стоять на одной статье положено. Главная схватка периода
+# берётся из отчёта о дне — так сказано и в пользовательском сообщении
+# (llm.tournament_brief), — поэтому блок о схватке и блок о дне ссылаются
+# на один и тот же отчёт по устройству, а не по ошибке модели.
+SHARED_BY_DESIGN = ({"basho_bout", "basho_day"},)
+
+
+def check_source_reuse(digest: dict) -> list[str]:
+    """Блоки, которые стоят на одних и тех же статьях. Публикацию не останавливают.
+
+    Спецификация (§7.3) требует «одна новость — один блок», и до 17.09.2026
+    приёмка проверяла это так: ни одна статья не попала в два блока. Проверка
+    оказалась строже требования и валила верные выпуски. Японская сводка дня
+    описывает десяток схваток, и три блока о трёх разных событиях законно
+    ссылаются на неё все три — это один источник, а не одна новость.
+
+    Признак настоящего дробления другой: блок, который не добавил ни одной
+    своей статьи к другому блоку. Если весь его набор источников — подмножество
+    чужого, писать о том же событии второй раз было просто нечем.
+    """
+    notes: list[str] = []
+    blocks = list(enumerate(digest.get("blocks", []), start=1))
+    for (first, one), (second, other) in itertools.combinations(blocks, 2):
+        ids_one = set(one.get("source_ids", []))
+        ids_other = set(other.get("source_ids", []))
+        if not ids_one or not ids_other:
+            continue
+        if {one.get("category"), other.get("category")} in SHARED_BY_DESIGN:
+            continue
+        if not (ids_one <= ids_other or ids_other <= ids_one):
+            continue
+        shared = sorted(ids_one & ids_other)
+        notes.append(
+            f"блоки {first} и {second} стоят на одних и тех же статьях "
+            f"({', '.join(shared)}) — похоже на одну новость, разнесённую "
+            f"на два блока")
     return notes
 
 
@@ -328,6 +368,7 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     # И утверждения о полноте: их проверяет человек по ссылке, но найти их
     # обязан код, иначе они находятся так, как 17.09.2026 — из готового выпуска.
     report.warnings.extend(check_completeness_claims(digest))
+    report.warnings.extend(check_source_reuse(digest))
     if dropped:
         report.warnings.append(
             f"блоков было {len(digest['blocks']) + len(dropped)}, оставлено "

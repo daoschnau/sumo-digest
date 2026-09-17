@@ -22,7 +22,13 @@ import yaml
 from .basho import current_basho, load_calendar
 from .render import ISSUES
 from .translit import lint_digest
-from .validate import MAX_BLOCKS, MIN_BLOCKS, block_order, check_completeness_claims
+from .validate import (
+    MAX_BLOCKS,
+    MIN_BLOCKS,
+    block_order,
+    check_completeness_claims,
+    check_source_reuse,
+)
 
 SOURCES = Path("config/sources.yml")
 KANJI = re.compile(r"[㐀-鿿]")
@@ -66,6 +72,16 @@ def basho_sources(path: Path = SOURCES) -> set[str]:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     return {source["name"] for source in config["sources"]
             if source.get("only_during_basho")}
+
+
+def shared_articles(issue: dict) -> list[str]:
+    """Статьи, попавшие больше чем в один блок: «a001 → блоки 2, 3, 4»."""
+    places: dict[str, list[int]] = {}
+    for number, block in enumerate(issue.get("blocks", []), start=1):
+        for article_id in block.get("source_ids", []):
+            places.setdefault(article_id, []).append(number)
+    return [f"{article_id} → блоки {', '.join(str(n) for n in numbers)}"
+            for article_id, numbers in sorted(places.items()) if len(numbers) > 1]
 
 
 def sentences(text: str) -> int:
@@ -115,13 +131,9 @@ def check_issue(issue: dict) -> list[Check]:
         checks.append(Check("Вне турнира турнирных блоков нет", days + bouts == 0,
                             f"дней: {days}, схваток: {bouts}" if days + bouts else ""))
 
-    used: dict[str, int] = {}
-    for block in blocks:
-        for article_id in block.get("source_ids", []):
-            used[article_id] = used.get(article_id, 0) + 1
-    repeated = [article_id for article_id, times in used.items() if times > 1]
-    checks.append(Check("Нет дублей: одна статья не растащена по разным блокам",
-                        not repeated, ", ".join(repeated) if repeated else ""))
+    reuse = check_source_reuse(issue)
+    checks.append(Check("Нет дублей: одна новость — один блок",
+                        not reuse, "; ".join(reuse) if reuse else ""))
 
     hosts = allowed_hosts()
     outside = {urlsplit(source["url"]).netloc
@@ -165,8 +177,12 @@ def check_issue(issue: dict) -> list[Check]:
                         "глазами"))
     checks.append(Check("Противоречия источников приведены обоими вариантами", None,
                         "глазами"))
+    # Код судит только по наборам источников: статья в двух блоках бывает
+    # и законной (сводка дня описывает десяток схваток). Совпадают ли блоки
+    # по смыслу, видно лишь из текста — поэтому здесь список, а не приговор.
+    shared = shared_articles(issue)
     checks.append(Check("Одна новость — один блок по смыслу, а не по ссылкам", None,
-                        "глазами"))
+                        "; ".join(shared) if shared else "статей в двух блоках нет"))
     return checks
 
 

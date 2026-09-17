@@ -17,6 +17,7 @@ from sumo_digest.validate import (
     ValidationFailed,
     check_completeness_claims,
     check_facts,
+    check_source_reuse,
     sort_blocks,
     validate,
 )
@@ -368,3 +369,44 @@ def test_the_wording_that_replaced_the_claim_passes():
     assert not check_completeness_claims(
         {"lead": "В дзюрё пять побед из пяти у Кагаяки — впервые с Хацу Басё 2020 года.",
          "blocks": []})
+
+
+# --- одна новость — один блок -----------------------------------------------
+
+def reused(blocks: list[tuple[str, list[str]]]) -> list[str]:
+    return check_source_reuse(
+        {"blocks": [{"category": category, "source_ids": ids}
+                    for category, ids in blocks]})
+
+
+def test_a_block_standing_on_nothing_of_its_own_is_reported():
+    """Весь набор источников — подмножество чужого: писать второй раз нечем."""
+    notes = reused([("makuuchi_juryo", ["a001", "a002"]),
+                    ("makuuchi_juryo", ["a001"])])
+    assert notes and "блоки 1 и 2" in notes[0] and "a001" in notes[0]
+
+
+def test_a_day_roundup_may_feed_several_blocks():
+    """Японская сводка дня описывает десяток схваток — это один источник,
+
+    а не одна новость. Ровно на этом приёмка валила верные выпуски 14.09
+    и 17.09.2026, пока признаком дубля считалась статья в двух блоках.
+    """
+    assert not reused([("makuuchi_juryo", ["a001", "a010"]),
+                       ("makuuchi_juryo", ["a001", "a011"]),
+                       ("makuuchi_juryo", ["a001", "a012"])])
+
+
+def test_the_key_bout_and_its_day_may_stand_on_the_same_report():
+    """Схватку периода модель берёт из отчёта о дне — так сказано в сообщении."""
+    assert not reused([("basho_bout", ["a005"]),
+                       ("basho_day", ["a005", "a009"])])
+    # Но два дня на одном отчёте — уже не по устройству.
+    assert reused([("basho_day", ["a005"]), ("basho_day", ["a005", "a009"])])
+
+
+def test_source_reuse_lands_in_the_report_without_blocking(digest, corpus):
+    digest["blocks"][1]["source_ids"] = digest["blocks"][0]["source_ids"]
+    checked, report = validate(digest, corpus)
+    assert checked["blocks"], "выпуск публикуется"
+    assert any("одну новость" in note for note in report.warnings)
