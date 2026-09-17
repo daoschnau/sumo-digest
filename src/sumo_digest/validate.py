@@ -55,6 +55,49 @@ DATE_SLACK_DAYS = 7
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
+# Утверждения о полноте картины: «единственный», «не осталось», «никто больше».
+# Судить их код не может — в корпусе японский текст, в выпуске русский, — но
+# найти и назвать может, и это не мелочь. В выпуске 17.09.2026 модель написала
+# «единственный чистый счёт в дзюрё после пяти дней у Кагаяки», имея в корпусе
+# одну заметку о его пятой победе: из «есть статья про одного» вывела «такой
+# один». На самом деле с 5-0 шли четверо. Корпус — не сводка всех результатов,
+# а те статьи, которые удалось собрать, и раздел про дзюрё у Sumo Stomp закрыт
+# подпиской, то есть молчание корпуса тут не значило ровно ничего.
+#
+# Правило в промпте (правило 3 в prompts/write.md) снижает частоту таких фраз,
+# но не убирает их — как и с транслитерацией. Поэтому они попадают в отчёт
+# прогона и в приёмку: не запрет, а место, куда смотреть.
+COMPLETENESS_CLAIM = re.compile(
+    r"единственн\w*|единолич\w*|(?:больше )?ни у кого(?: больше)?|"
+    r"не осталось|никто|остался один|осталась одна",
+    re.IGNORECASE)
+
+
+def claims(text: str) -> list[str]:
+    """Фразы об исключительности, найденные в тексте. Порядок — как в тексте."""
+    return [match.group(0) for match in COMPLETENESS_CLAIM.finditer(text or "")]
+
+
+def check_completeness_claims(digest: dict) -> list[str]:
+    """Замечания об утверждениях полноты. Публикацию не останавливают.
+
+    Отказать тут нельзя: «единственный» бывает и законным — если так сказано
+    в источнике. Проверить это способен только человек, открыв ссылку; код
+    называет, что и где искать.
+    """
+    notes: list[str] = []
+    for found, where in ((claims(digest.get("lead", "")), "lead"),
+                         (claims(digest.get("missed", "")), "missed")):
+        if found:
+            notes.append(f"{where}: утверждение о полноте — «{'», «'.join(found)}»")
+    for number, block in enumerate(digest.get("blocks", []), start=1):
+        found = claims(f"{block.get('subtitle', '')} {block.get('body', '')}")
+        if found:
+            notes.append(f"блок {number}: утверждение о полноте — "
+                         f"«{'», «'.join(found)}»; сверить с источником")
+    return notes
+
+
 class ValidationFailed(Exception):
     """Выпуск не может быть опубликован. В аргументе — список причин."""
 
@@ -282,6 +325,9 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     digest, report = lint_digest(digest)
     # Турнирная часть — тоже замечания, а не отказ: см. check_tournament.
     report.warnings.extend(check_tournament(digest, corpus))
+    # И утверждения о полноте: их проверяет человек по ссылке, но найти их
+    # обязан код, иначе они находятся так, как 17.09.2026 — из готового выпуска.
+    report.warnings.extend(check_completeness_claims(digest))
     if dropped:
         report.warnings.append(
             f"блоков было {len(digest['blocks']) + len(dropped)}, оставлено "

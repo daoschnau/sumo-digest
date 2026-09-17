@@ -22,7 +22,7 @@ import yaml
 from .basho import current_basho, load_calendar
 from .render import ISSUES
 from .translit import lint_digest
-from .validate import MAX_BLOCKS, MIN_BLOCKS, block_order
+from .validate import MAX_BLOCKS, MIN_BLOCKS, block_order, check_completeness_claims
 
 SOURCES = Path("config/sources.yml")
 KANJI = re.compile(r"[㐀-鿿]")
@@ -154,6 +154,12 @@ def check_issue(issue: dict) -> list[Check]:
                         exclamations == 0, f"найдено: {exclamations}"))
 
     # Дальше — то, что код судить не может.
+    # Утверждения о полноте код находит, но проверить может только человек,
+    # открыв ссылку: «единственный 5-0» законен, если так сказано в источнике,
+    # и выдуман, если выведен из того, что про остальных статей не было.
+    claims = check_completeness_claims(issue)
+    checks.append(Check("Утверждения об исключительности сверены с источниками", None,
+                        "; ".join(claims) if claims else "не найдено"))
     checks.append(Check("Стиль: без патетики и высокопарных метафор", None, "глазами"))
     checks.append(Check("Оценки реалистичны: низшие дивизионы не равны макуути", None,
                         "глазами"))

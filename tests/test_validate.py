@@ -15,6 +15,7 @@ from sumo_digest.schema import api_schema, load_schema
 from sumo_digest.validate import (
     MAX_BLOCKS,
     ValidationFailed,
+    check_completeness_claims,
     check_facts,
     sort_blocks,
     validate,
@@ -332,3 +333,38 @@ def test_tournament_blocks_outside_a_tournament_are_reported(digest, corpus):
     digest["blocks"][0] = dict(day_block(1, "a001"), date="2026-09-10")
     _, report = validate(digest, corpus)
     assert any("турнира в периоде нет" in note for note in report.warnings)
+
+
+# --- утверждения о полноте --------------------------------------------------
+
+def test_a_fabricated_exclusivity_claim_is_named_but_published(digest, corpus):
+    """Выпуск 17.09.2026: «единственный чистый счёт в дзюрё у Кагаяки» при четверых.
+
+    Отказать здесь нельзя: «единственный» законен, если так сказано
+    в источнике, и проверить это может только человек по ссылке. Но найти
+    и назвать фразу обязан код — иначе она находится из готового выпуска.
+    """
+    digest["blocks"][0]["body"] = (
+        "Единственный чистый счёт в дзюрё после пяти дней у Кагаяки (輝). " * 2)
+    checked, report = validate(digest, corpus)
+    assert checked["blocks"], "выпуск публикуется"
+    assert any("блок 1" in note and "единственный" in note.lower()
+               for note in report.warnings)
+
+
+def test_completeness_claims_are_found_in_the_lead_too():
+    notes = check_completeness_claims(
+        {"lead": "Борцов с чистым счётом в макуути не осталось.", "blocks": []})
+    assert notes and notes[0].startswith("lead")
+
+
+def test_a_clean_issue_gets_no_completeness_notes(digest, corpus):
+    _, report = validate(digest, corpus)
+    assert not [note for note in report.warnings if "полноте" in note]
+
+
+def test_the_wording_that_replaced_the_claim_passes():
+    """«Икс идёт 5-0» — утверждение о борце, а не о полноте картины."""
+    assert not check_completeness_claims(
+        {"lead": "В дзюрё пять побед из пяти у Кагаяки — впервые с Хацу Басё 2020 года.",
+         "blocks": []})

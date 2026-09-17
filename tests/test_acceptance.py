@@ -108,8 +108,13 @@ def test_issue_without_kanji_fails(issue):
 
 def test_human_items_are_never_marked_passed(issue):
     human = [check for check in check_issue(issue) if check.passed is None]
-    assert len(human) == 4
-    assert all(check.detail == "глазами" for check in human)
+    assert len(human) == 5
+    # Четыре пункта о стиле и смысле код не видит вовсе — «глазами». Пятый,
+    # об утверждениях исключительности, он находит, но судить не может:
+    # там вместо «глазами» лежит список найденных фраз.
+    listed = [check for check in human if check.item.startswith("Утверждения")]
+    assert len(listed) == 1
+    assert [check.detail for check in human if check not in listed] == ["глазами"] * 4
 
 
 def test_closed_list_hosts_come_from_the_config():
@@ -159,3 +164,15 @@ def test_outside_a_tournament_the_chronicle_must_be_absent(issue):
     assert result(issue, "Вне турнира").passed is True
     issue["blocks"][0]["category"] = "basho_day"
     assert result(issue, "Вне турнира").passed is False
+
+
+def test_exclusivity_claims_are_listed_for_the_human(issue):
+    """Код их находит, судит человек: пункт остаётся со скобками, но со списком."""
+    check = result(issue, "Утверждения об исключительности")
+    assert check.passed is None
+    assert check.detail == "не найдено"
+
+    issue["blocks"][0]["body"] = "Единственный чистый счёт в дзюрё у Кагаяки."
+    check = result(issue, "Утверждения об исключительности")
+    assert check.passed is None
+    assert "единственный" in check.detail.lower()
