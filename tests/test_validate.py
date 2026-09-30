@@ -409,7 +409,7 @@ def test_source_reuse_lands_in_the_report_without_blocking(digest, corpus):
     digest["blocks"][1]["source_ids"] = digest["blocks"][0]["source_ids"]
     checked, report = validate(digest, corpus)
     assert checked["blocks"], "выпуск публикуется"
-    assert any("одну новость" in note for note in report.warnings)
+    assert any("не одно ли это событие" in note for note in report.warnings)
 
 
 def test_a_term_outside_the_glossary_is_reported(monkeypatch, digest, corpus):

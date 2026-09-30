@@ -131,9 +131,6 @@ def check_issue(issue: dict) -> list[Check]:
         checks.append(Check("Вне турнира турнирных блоков нет", days + bouts == 0,
                             f"дней: {days}, схваток: {bouts}" if days + bouts else ""))
 
-    reuse = check_source_reuse(issue)
-    checks.append(Check("Нет дублей: одна новость — один блок",
-                        not reuse, "; ".join(reuse) if reuse else ""))
 
     hosts = allowed_hosts()
     outside = {urlsplit(source["url"]).netloc
@@ -177,10 +174,12 @@ def check_issue(issue: dict) -> list[Check]:
                         "глазами"))
     checks.append(Check("Противоречия источников приведены обоими вариантами", None,
                         "глазами"))
-    # Код судит только по наборам источников: статья в двух блоках бывает
-    # и законной (сводка дня описывает десяток схваток). Совпадают ли блоки
-    # по смыслу, видно лишь из текста — поэтому здесь список, а не приговор.
-    shared = shared_articles(issue)
+    # Код судит только по наборам источников, а «одна новость» — свойство смысла.
+    # Сводка дня кормит несколько блоков законно; блок, не добавивший ни одной
+    # своей статьи, бывает и повтором (Хошорю и заседание совета, 28.09.2026),
+    # и отдельным сюжетом (бандзуке и главная схватка того же выпуска).
+    # Поэтому здесь список того, на что смотреть, а не приговор.
+    shared = shared_articles(issue) + check_source_reuse(issue)
     checks.append(Check("Одна новость — один блок по смыслу, а не по ссылкам", None,
                         "; ".join(shared) if shared else "статей в двух блоках нет"))
     return checks
