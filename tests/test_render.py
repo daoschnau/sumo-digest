@@ -5,7 +5,15 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from sumo_digest.render import day, load_issues, render_site, stamp
+from sumo_digest.names import Name
+from sumo_digest.render import (
+    UNVERIFIED_MARK,
+    day,
+    load_issues,
+    page_view,
+    render_site,
+    stamp,
+)
 
 ATOM = {"a": "http://www.w3.org/2005/Atom"}
 
@@ -349,3 +357,62 @@ def test_the_issue_link_is_the_loudest_thing_on_the_index(site):
     html = (site / "index.html").read_text(encoding="utf-8")
     assert "<details>" in html, "дисклеймер свёрнут, а не обведён рамкой"
     assert 'class="note"' not in html
+
+
+# --- словарь имён в вёрстке -------------------------------------------------
+
+KNOWN = {"takanosho": Name(kanji="隆の勝", ru="Таканошо", romaji="Takanosho", verified=True),
+         "tobizaru": Name(kanji="飛翔富士", ru="Тобидзару", romaji="Tobizaru", verified=False)}
+
+
+@pytest.fixture
+def dictionary(monkeypatch):
+    monkeypatch.setattr("sumo_digest.render.by_romaji", lambda: KNOWN)
+
+
+def test_kanji_are_shown_once_per_page(dictionary):
+    """Модель ставит написание в каждом блоке — на странице оно нужно один раз.
+
+    Правило «первое упоминание внутри блока» остаётся: блоки читают вразнобой,
+    и в JSON с фидом написание есть у каждого. Повтор снимается в вёрстке.
+    """
+    issue = {"lead": "Оносато (大の里) выиграл.",
+             "blocks": [{"subtitle": "Оносато (大の里) впереди",
+                         "body": "Оносато (大の里) снова победил Аонишики (安青錦)."}],
+             "missed": ""}
+    page = str(page_view(issue)["blocks"][0]["body"])
+    assert "大の里" not in page, "второе написание на странице лишнее"
+    assert "安青錦" in page, "первое написание имени остаётся"
+
+
+def test_a_parenthesis_with_more_than_kanji_survives(dictionary):
+    """«(輝, Такадагава-бея, 高田川)» несёт бейю, которой в первом упоминании нет."""
+    issue = {"lead": "Кагаяки (輝) идёт 5-0.",
+             "blocks": [{"subtitle": "Дзюрё",
+                         "body": "Кагаяки (輝, Такадагава-бея, 高田川) выиграл."}],
+             "missed": ""}
+    page = str(page_view(issue)["blocks"][0]["body"])
+    assert "Такадагава-бея" in page
+
+
+def test_a_known_romaji_note_becomes_kanji(dictionary):
+    """«?» означает «написание не сверено», а не «в статьях не нашлось кандзи»."""
+    issue = {"lead": "Таканошо (romaji: Takanosho — требует проверки) проиграл.",
+             "blocks": [], "missed": ""}
+    page = str(page_view(issue)["lead"])
+    assert "隆の勝" in page and "Takanosho" not in page
+    assert UNVERIFIED_MARK not in page, "сверенное имя знака вопроса не получает"
+
+
+def test_an_unverified_name_keeps_the_mark(dictionary):
+    issue = {"lead": "Тобидзару (romaji: Tobizaru) в опасной зоне.",
+             "blocks": [], "missed": ""}
+    page = str(page_view(issue)["lead"])
+    assert "飛翔富士" in page and UNVERIFIED_MARK in page
+
+
+def test_an_unknown_name_stays_as_it_was(dictionary):
+    issue = {"lead": "Сококурай (romaji: Sokokurai — требует проверки) вернулся.",
+             "blocks": [], "missed": ""}
+    page = str(page_view(issue)["lead"])
+    assert "Sokokurai" in page and UNVERIFIED_MARK in page

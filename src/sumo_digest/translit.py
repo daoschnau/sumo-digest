@@ -18,6 +18,8 @@ from pathlib import Path
 
 import yaml
 
+from .names import canonical_names
+
 RULES_PATH = Path("config/translit_rules.yml")
 
 # «Имя (romaji: Xxxx — требует проверки)» — легальная конструкция из спецификации,
@@ -126,17 +128,37 @@ def warnings(text: str, rules: dict) -> list[str]:
         if found:
             notes.append(f"{rule['id']}: {rule['message']}")
 
-    canonical = rules.get("canonical_names", [])
+    # Канонические имена — из правил и из словаря data/names.json: там их сотня,
+    # и «Какгаяки» ловится сравнением, а не отдельным правилом на каждую описку.
+    canonical = list(rules.get("canonical_names", [])) + canonical_names()
     known = set(canonical)
     for word in set(re.findall(r"[А-ЯЁ][а-яё]+", text)):
         if word in known or len(word) < MIN_NAME_LENGTH:
             continue
         # На коротких словах допускаем только одну букву разницы, на длинных — две.
         limit = 1 if len(word) < 8 else 2
-        near = [name for name in canonical if 0 < distance(word, name) <= limit]
+        near = [name for name in canonical
+                if 0 < distance(word, name) <= limit and not inflected(word, name)]
         if near:
             notes.append(f"похоже на опечатку: «{word}» против «{near[0]}»")
     return notes
+
+
+# Падежные окончания имён на -а: Котодзакуру, Киришиме, Гоноямой.
+CASE_ENDINGS = ("а", "ы", "и", "е", "у", "ой", "ою")
+
+
+def inflected(word: str, name: str) -> bool:
+    """«Котодзакуру» — падеж имени, а не описка в нём.
+
+    Склоняются только имена на -а: Киришима, Котодзакура, Гонояма. Остальные
+    в русском несклоняемы, и расхождение в последней букве у них — ошибка,
+    а не падеж: «Хошору» против «Хошорю» предупреждение получает.
+    """
+    if not name.endswith("а"):
+        return False
+    stem = name[:-1]
+    return word.startswith(stem) and word[len(stem):] in CASE_ENDINGS
 
 
 def lint_text(text: str, rules: dict, where: str = "") -> tuple[str, LintReport]:

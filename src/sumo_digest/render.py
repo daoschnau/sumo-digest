@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+from .names import by_romaji
 from .translit import lint_digest
 from .validate import sort_blocks
 
@@ -50,7 +51,11 @@ def stamp(value: str) -> str:
 # В данных она остаётся как есть, в вёрстке от неё остаётся романизация и знак
 # вопроса с подсказкой: в одном выпуске таких пометок бывает восемь, и «требует
 # проверки» посреди предложения читатель спотыкается о каждую.
-ROMAJI_NOTE = re.compile(r"romaji:\s*(?P<romaji>[^—)]+?)\s*—\s*требует проверки")
+# Модель пишет пометку двумя видами: «(romaji: Takanosho — требует проверки)»
+# и короче, «(romaji: Wakatakakage)». Ловим оба: хвост необязателен, зато
+# пометка всегда стоит в скобках, и на закрывающую скобку регулярка опирается.
+ROMAJI_NOTE = re.compile(
+    r"romaji:\s*(?P<romaji>[A-Za-z][A-Za-z '-]*?)\s*(?:—\s*требует проверки)?\s*(?=\))")
 
 # «тачиай [начальный сход]» — пояснение термина. Модель ставит его при первом
 # упоминании в каждом блоке (так задумано: блоки читают вразнобой и переставляет
@@ -69,22 +74,57 @@ UNVERIFIED_MARK = ('<sup class="unverified" title="транслитерация 
 # кириллицей самая служебная часть фразы выглядит самой заметной. Поэтому
 # скобку приглушаем, но только эту: «(частичный разрыв)» — обычный текст.
 CJK = r"぀-ヿ㐀-䶿一-鿿ｦ-ﾟ"
-APPARATUS = re.compile(rf"\((?P<inside>[^()]*(?:[{CJK}]|{re.escape(UNVERIFIED_MARK)})"
-                       r"[^()]*)\)")
+APPARATUS = re.compile(rf"(?P<space>[  ]?)\((?P<inside>[^()]*(?:[{CJK}]|"
+                       rf"{re.escape(UNVERIFIED_MARK)})[^()]*)\)")
+KANJI_RUN = re.compile(rf"[{CJK}]+")
 
 
-def prose(text: str, glossary: dict[str, tuple[str, str]]) -> Markup:
+def prose(text: str, glossary: dict[str, tuple[str, str]],
+          shown: set[str] | None = None) -> Markup:
     """Текст выпуска → готовый к вёрстке HTML.
 
     Данные не трогаем: и пометка о проверке, и пояснения терминов остаются
     в JSON и уезжают в фид. Здесь снимается только то, что мешает читать
     страницу подряд. `glossary` общий на весь выпуск: пояснения вынимаются
     из фраз в порядке появления и собираются под текстом.
+
+    `shown` — иероглифы, уже показанные на этой странице. Модель ставит их при
+    первом упоминании в каждом блоке (так задумано: блоки читают вразнобой,
+    и порядок им задаёт код), но на собранной странице «Оносато (大の里)»
+    повторялось до десяти раз за выпуск. Повторы снимаются здесь, в вёрстке,
+    а не правилом модели: в JSON и в фиде написание остаётся при каждом блоке.
     """
-    marked = ROMAJI_NOTE.sub(lambda match: match.group("romaji") + UNVERIFIED_MARK,
-                             str(escape(text)))
-    marked = APPARATUS.sub(
-        lambda match: f'<span class="aside">({match.group("inside")})</span>', marked)
+    seen = shown if shown is not None else set()
+    known = by_romaji()
+
+    def romaji_note(match: re.Match) -> str:
+        """«romaji: Takanosho — требует проверки» → иероглифы, если имя знакомо.
+
+        Знак «?» означает «написание не сверено», а не «в статьях этого выпуска
+        не нашлось иероглифов»: у половины помеченных имён кандзи были
+        в соседнем выпуске (разбор 30.09.2026).
+        """
+        romaji = match.group("romaji").strip()
+        name = known.get(romaji.casefold())
+        if name is None:
+            return romaji + UNVERIFIED_MARK
+        return name.kanji if name.verified else name.kanji + UNVERIFIED_MARK
+
+    def apparatus(match: re.Match) -> str:
+        inside = match.group("inside")
+        kanji = KANJI_RUN.findall(inside)
+        # Снимается только повтор чистого написания. Скобка, где кроме
+        # иероглифов есть бейя или прежний ранг, несёт сведения, которых
+        # в первом упоминании могло не быть, — она остаётся.
+        bare = kanji and not KANJI_RUN.sub("", inside).strip(" ,;·—-")
+        if bare and kanji[0] in seen:
+            return ""
+        if kanji:
+            seen.add(kanji[0])
+        return f'{match.group("space")}<span class="aside">({inside})</span>'
+
+    marked = ROMAJI_NOTE.sub(romaji_note, str(escape(text)))
+    marked = APPARATUS.sub(apparatus, marked)
 
     def collect(match: re.Match) -> str:
         term = match.group("term").strip(TERM_EDGES)
@@ -98,16 +138,18 @@ def prose(text: str, glossary: dict[str, tuple[str, str]]) -> Markup:
 def page_view(issue: dict) -> dict:
     """Копия выпуска с подготовленным текстом. Оригинал нужен индексу и фиду."""
     glossary: dict[str, tuple[str, str]] = {}
+    # Иероглифы — один раз на страницу, в порядке чтения: лид, блоки, «мимо кассы».
+    shown: set[str] = set()
     view = dict(issue)
-    view["lead"] = prose(issue.get("lead", ""), glossary)
+    view["lead"] = prose(issue.get("lead", ""), glossary, shown)
     view["blocks"] = []
     for block in issue.get("blocks", []):
         prepared = dict(block)
-        prepared["subtitle"] = prose(block.get("subtitle", ""), glossary)
-        prepared["body"] = prose(block.get("body", ""), glossary)
+        prepared["subtitle"] = prose(block.get("subtitle", ""), glossary, shown)
+        prepared["body"] = prose(block.get("body", ""), glossary, shown)
         view["blocks"].append(prepared)
     if issue.get("missed"):
-        view["missed"] = prose(issue["missed"], glossary)
+        view["missed"] = prose(issue["missed"], glossary, shown)
     view["glossary"] = list(glossary.values())
     return view
 

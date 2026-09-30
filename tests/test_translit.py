@@ -237,3 +237,15 @@ def test_tochitaikai_is_fixed_in_every_case_form(rules):
                          rules)
     assert "Точидайка" not in fixed.replace("Точитайка", "")
     assert fixed.count("Точитайка") == 2
+
+
+def test_case_forms_of_a_name_are_not_typos(rules):
+    """«Котодзакуру» — падеж, «Хошору» — описка. Склоняются только имена на -а."""
+    _, report = lint_text("Хакунофуджи вытолкнул Котодзакуру за пределы круга.", rules)
+    assert not [note for note in report.warnings if "опечатку" in note]
+
+
+def test_a_name_from_the_dictionary_catches_a_typo(rules):
+    """Словарь data/names.json даёт линтеру сотню имён без отдельных правил."""
+    _, report = lint_text("Борец Онасато взял Кубок.", rules)
+    assert any("«Онасато» против «Оносато»" in note for note in report.warnings)

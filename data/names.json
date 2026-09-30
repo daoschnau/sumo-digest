@@ -1,0 +1,539 @@
+{
+  "note": "Словарь имён: кандзи → написание. Наполнен из вышедших выпусков (scripts/build_names.py), дальше правится руками. verified: true — сверено владельцем или закреплено в спецификации; false — написание взято из выпусков и ждёт проверки, в тексте такое имя идёт со знаком «?».",
+  "names": {
+    "大の里": {
+      "ru": "Оносато",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "霧島": {
+      "ru": "Киришима",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "安青錦": {
+      "ru": "Аонишики",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "藤ノ川": {
+      "ru": "Фуджинокава",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "熱海富士": {
+      "ru": "Атамифуджи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "美ノ海": {
+      "ru": "Чураноуми",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "豊昇龍": {
+      "ru": "Хошорю",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "琴桜": {
+      "ru": "Котодзакура",
+      "romaji": "Kotozakura",
+      "role": "rikishi",
+      "verified": true
+    },
+    "高安": {
+      "ru": "Такаясу",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "琴勝峰": {
+      "ru": "Котошохо",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "義ノ富士": {
+      "ru": "Ёшинофуджи",
+      "romaji": "Yoshinofuji",
+      "role": "rikishi",
+      "verified": true
+    },
+    "藤凌駕": {
+      "ru": "Фуджирёга",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "大栄翔": {
+      "ru": "Дайейшо",
+      "romaji": "Daieisho",
+      "role": "rikishi",
+      "verified": true
+    },
+    "伯乃富士": {
+      "ru": "Хакунофуджи",
+      "romaji": "Hakunofuji",
+      "role": "rikishi",
+      "verified": true
+    },
+    "時不動": {
+      "ru": "Токифудо",
+      "romaji": "Tokifudo",
+      "role": "rikishi",
+      "verified": true
+    },
+    "正代": {
+      "ru": "Шодай",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "輝": {
+      "ru": "Кагаяки",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "豪ノ山": {
+      "ru": "Гонояма",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "朝乃山": {
+      "ru": "Асанояма",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "金峰山": {
+      "ru": "Кинбодзан",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "朝翠龍": {
+      "ru": "Асасуирю",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "時疾風": {
+      "ru": "Токихаяте",
+      "romaji": "Tokihayate",
+      "role": "rikishi",
+      "verified": false
+    },
+    "二所ノ関": {
+      "ru": "Нишоносеки",
+      "romaji": "",
+      "role": "oyakata",
+      "verified": false
+    },
+    "大島理森": {
+      "ru": "Тадамори",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "寿之富士": {
+      "ru": "Тошинофуджи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "旭富士": {
+      "ru": "Асахифуджи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "炎鵬": {
+      "ru": "Энхо",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "友風": {
+      "ru": "Томокадзе",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "白熊": {
+      "ru": "Хаккуме",
+      "romaji": "Hakkuma",
+      "role": "rikishi",
+      "verified": false
+    },
+    "若元春": {
+      "ru": "Вакамотохару",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "生田目": {
+      "ru": "Набатаме",
+      "romaji": "Ikutame",
+      "role": "rikishi",
+      "verified": true
+    },
+    "湊川": {
+      "ru": "Минатогава",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "隆の勝": {
+      "ru": "Таканошо",
+      "romaji": "Takanosho",
+      "role": "rikishi",
+      "verified": false
+    },
+    "玉正鳳": {
+      "ru": "Тамашохо",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "伊勢ケ浜": {
+      "ru": "Исегахама-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "白鵬": {
+      "ru": "Хакухо",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "玉ノ井": {
+      "ru": "Таманои",
+      "romaji": "",
+      "role": "oyakata",
+      "verified": false
+    },
+    "立浪部屋": {
+      "ru": "Тацунами-бея",
+      "romaji": "Asahiyutaka",
+      "role": "rikishi",
+      "verified": false
+    },
+    "荒汐部屋": {
+      "ru": "Арашио-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "阿炎": {
+      "ru": "Аби",
+      "romaji": "Abi",
+      "role": "rikishi",
+      "verified": false
+    },
+    "若隆景": {
+      "ru": "Вакатакакаге",
+      "romaji": "Wakatakakage",
+      "role": "rikishi",
+      "verified": true
+    },
+    "安治川部屋": {
+      "ru": "Анджигава-бея",
+      "romaji": "Aminishiki",
+      "role": "rikishi",
+      "verified": false
+    },
+    "花田虎上": {
+      "ru": "Масару",
+      "romaji": "Hanada",
+      "role": "rikishi",
+      "verified": false
+    },
+    "朝紅龍": {
+      "ru": "Асакорю",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "千代翔馬": {
+      "ru": "Чиёшома",
+      "romaji": "Chiyoshoma",
+      "role": "rikishi",
+      "verified": false
+    },
+    "時津風部屋": {
+      "ru": "Токицукадзе-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "境川部屋": {
+      "ru": "Сакаигава-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "平戸海": {
+      "ru": "Хирадоуми",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "琴栄峰": {
+      "ru": "Котоэйхо",
+      "romaji": "Kotoeiho",
+      "role": "rikishi",
+      "verified": true
+    },
+    "旭海雄": {
+      "ru": "Кёкукайо",
+      "romaji": "Kyokukaio",
+      "role": "rikishi",
+      "verified": false
+    },
+    "栃大海": {
+      "ru": "Точитайкай",
+      "romaji": "Tochitaikai",
+      "role": "rikishi",
+      "verified": true
+    },
+    "翔傑": {
+      "ru": "Шокетсу",
+      "romaji": "Shoketsu",
+      "role": "rikishi",
+      "verified": false
+    },
+    "駒ノ富士": {
+      "ru": "Команофуджи",
+      "romaji": "Komanofuji",
+      "role": "rikishi",
+      "verified": false
+    },
+    "華吹": {
+      "ru": "Ханакадзе",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "東白龍": {
+      "ru": "Тохакурю",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "竜電": {
+      "ru": "Рюдена",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "垣添": {
+      "ru": "Какидзое",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "大当利": {
+      "ru": "Оатари",
+      "romaji": "Oatari",
+      "role": "rikishi",
+      "verified": false
+    },
+    "不動豊": {
+      "ru": "Фудоютака",
+      "romaji": "Fudoyutaka",
+      "role": "rikishi",
+      "verified": false
+    },
+    "上戸": {
+      "ru": "Уэто",
+      "romaji": "Ueto",
+      "role": "rikishi",
+      "verified": false
+    },
+    "尾上": {
+      "ru": "Оносато",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "舞の海秀平": {
+      "ru": "Шухей",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "木瀬": {
+      "ru": "Кисе-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "宇良": {
+      "ru": "Ура",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "明生": {
+      "ru": "Мейсей",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "中川": {
+      "ru": "Накагава-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "丹治": {
+      "ru": "Танджи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "佐渡ケ嶽": {
+      "ru": "Садогатаке-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "伯桜鵬": {
+      "ru": "Хакуохо",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "花田秀虎": {
+      "ru": "Хидеторой",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "音羽山": {
+      "ru": "Отоваяма-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "藤島": {
+      "ru": "Фуджишима-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "狼雅": {
+      "ru": "Рогу",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "舞の海": {
+      "ru": "Майноуми",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "高田川": {
+      "ru": "Такадагава-бея",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "嘉陽": {
+      "ru": "Кайсэй",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "安芸乃島": {
+      "ru": "Акиношима",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "碇潟": {
+      "ru": "Икаригату",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "寿之富士大聖": {
+      "ru": "Тошинофуджи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "玉鷲": {
+      "ru": "Тамаваши",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "佐田の海": {
+      "ru": "Саданоуми",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "若の里": {
+      "ru": "Ваканосато",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "安美錦": {
+      "ru": "Аминишики",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "大青山": {
+      "ru": "Дайсейдзана",
+      "romaji": "Daiseizan",
+      "role": "rikishi",
+      "verified": false
+    },
+    "御嶽海": {
+      "ru": "Митакеуми",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "長内": {
+      "ru": "Осанаи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "延原": {
+      "ru": "Нобухару",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    },
+    "照ノ富士": {
+      "ru": "Терунофуджи",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": true
+    },
+    "二所ノ関部屋": {
+      "ru": "Нишоносеки",
+      "romaji": "",
+      "role": "rikishi",
+      "verified": false
+    }
+  }
+}

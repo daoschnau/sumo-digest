@@ -17,6 +17,7 @@ from pathlib import Path
 import anthropic
 
 from .models import BashoWindow, Corpus, corpus_from_dict
+from .names import as_prompt
 from .schema import api_schema, load_schema
 from .translit import LintReport, lint_digest, read_field, write_field
 from .validate import MAX_BLOCKS, MIN_BLOCKS, ValidationFailed, validate
@@ -42,10 +43,16 @@ def build_system() -> list[dict]:
     ни разу, а запись в кеш стоит дороже обычного ввода. Замерено на E2:
     ~11 тысяч токенов руководства, чтение из кеша — ноль.
     """
-    return [
+    blocks = [
         {"type": "text", "text": WRITE_PROMPT.read_text(encoding="utf-8")},
         {"type": "text", "text": TRANSLIT_GUIDE.read_text(encoding="utf-8")},
     ]
+    # Словарь имён третьим блоком: полторы тысячи токенов против выдуманного
+    # написания в каждом выпуске. Пустой словарь блока не добавляет.
+    dictionary = as_prompt()
+    if dictionary:
+        blocks.append({"type": "text", "text": dictionary})
+    return blocks
 
 
 def tournament_brief(basho: BashoWindow) -> str:
