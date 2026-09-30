@@ -59,4 +59,15 @@ jobs:
           for url in $PROBE; do PROBES="$PROBES --probe $url"; done
           [ "$DUMP" = "true" ] && DUMP_FLAG="--dump" || DUMP_FLAG=""
           uv run python scripts/check_sources.py \
-            --show "$SHOW" $DUMP_FLAG $PROBES $SOURCES
+            --show "$SHOW" $DUMP_FLAG $PROBES ${PROBE:+--save build/pages} $SOURCES
+
+      # Разведанные страницы — артефактом: часть доменов из среды разработки
+      # недоступна, а разбор чужой разметки пишется по настоящей странице.
+      - name: Снятые страницы артефактом
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-${{ github.run_id }}
+          path: build/pages
+          retention-days: 14
+          if-no-files-found: ignore

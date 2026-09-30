@@ -175,8 +175,15 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
 
 
 
-def probe(url: str, defaults: dict) -> None:
-    """Разведка одиночного адреса: жив ли он и что за ссылки на нём есть."""
+def probe(url: str, defaults: dict, save: Path | None = None) -> None:
+    """Разведка одиночного адреса: жив ли он и что за ссылки на нём есть.
+
+    С `--save` страница ещё и сохраняется: парсер под чужую разметку пишется
+    по настоящей странице, а не по догадке, и сохранённая страница становится
+    фикстурой теста. Из среды разработки часть доменов недоступна, поэтому
+    снимать их приходится отсюда — руками или прогоном check-sources.yml,
+    который кладёт сохранённое в артефакт.
+    """
     timeout = float(defaults.get("timeout_seconds", 15))
     user_agent = defaults.get("user_agent", "sumo-digest/1.0")
     print(f"\n=== разведка {url}")
@@ -189,6 +196,13 @@ def probe(url: str, defaults: dict) -> None:
 
     print(f"    HTTP {response.status_code}, {len(response.content)} байт,"
           f" итоговый адрес {response.url}")
+    if save is not None:
+        save.mkdir(parents=True, exist_ok=True)
+        parts = urlsplit(str(response.url))
+        name = (parts.netloc + parts.path).strip("/").replace("/", "_") or "page"
+        path = save / f"{name}.html"
+        path.write_text(response.text, encoding="utf-8")
+        print(f"    сохранено: {path}")
     if response.status_code != 200:
         return
 
@@ -219,6 +233,9 @@ def main() -> int:
                            help="печатать все совпавшие ссылки, а не первые --show")
     arguments.add_argument("--probe", action="append", default=[], metavar="URL",
                            help="разведать произвольный адрес (можно несколько раз)")
+    arguments.add_argument("--save", type=Path, metavar="DIR",
+                           help="сохранять разведанные страницы в каталог: "
+                                "по ним пишется разбор чужой разметки")
     options = arguments.parse_args()
 
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
@@ -226,7 +243,7 @@ def main() -> int:
 
     if options.probe:
         for url in options.probe:
-            probe(url, defaults)
+            probe(url, defaults, options.save)
         return 0
     selected = [s for s in config["sources"]
                 if s.get("enabled", True)
