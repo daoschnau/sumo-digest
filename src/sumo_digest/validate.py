@@ -14,6 +14,7 @@ from datetime import date, timedelta
 
 from jsonschema import Draft202012Validator
 
+from .glossary import glossary
 from .models import Corpus
 from .schema import load_schema
 from .translit import LintReport, lint_digest
@@ -227,6 +228,31 @@ def check_tournament(digest: dict, corpus: Corpus) -> list[str]:
     return notes
 
 
+# «тачиай [начальный сход]» — пояснение термина в тексте выпуска.
+GLOSS_TERM = re.compile(r"([^\s\[\]()]+)[  ]?\[([^\[\]]{2,80})\]")
+TERM_EDGES = " ,.;:!?«»\"'—–-"
+
+
+def check_glossary(digest: dict) -> list[str]:
+    """Термины, которых нет в data/glossary.json. Публикацию не останавливают.
+
+    Определение такого термина берётся из выпуска — то есть у модели, — а значит,
+    в следующем выпуске оно будет другим. Замечание нужно, чтобы владелец
+    пополнил словарь и формулировка стала одна на все выпуски.
+    """
+    text = " ".join([digest.get("lead", ""), digest.get("missed", "")]
+                    + [f"{block.get('subtitle', '')} {block.get('body', '')}"
+                       for block in digest.get("blocks", [])])
+    known = glossary()
+    unknown = {term.strip(TERM_EDGES).casefold()
+               for term, _ in GLOSS_TERM.findall(text)}
+    missing = sorted(term for term in unknown if term and term not in known)
+    if not missing:
+        return []
+    return [f"терминов вне словаря {len(missing)}: {', '.join(missing)} — "
+            f"определение взято у модели, добавить в data/glossary.json"]
+
+
 def block_order(block: dict) -> tuple[int, int, int]:
     """Ключ сортировки: значимость, потом категория, потом свежесть.
 
@@ -369,6 +395,7 @@ def validate(digest: dict, corpus: Corpus) -> tuple[dict, LintReport]:
     # обязан код, иначе они находятся так, как 17.09.2026 — из готового выпуска.
     report.warnings.extend(check_completeness_claims(digest))
     report.warnings.extend(check_source_reuse(digest))
+    report.warnings.extend(check_glossary(digest))
     if dropped:
         report.warnings.append(
             f"блоков было {len(digest['blocks']) + len(dropped)}, оставлено "

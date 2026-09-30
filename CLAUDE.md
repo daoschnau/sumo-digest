@@ -85,8 +85,9 @@ prompts/write.md           системный промпт писателя
 prompts/select.md          НЕ используется: задачи шага select решены в collect.py
 prompts/translit_guide.md  руководство по транслитерации (§3 спецификации)
 src/sumo_digest/           collect, extract, basho, llm, validate, render, state, run
-templates/                 issue.html, index.html, atom.xml
+templates/                 issue.html, index.html, glossary.html, atom.xml
 data/names.json            словарь имён: кандзи → написание, флаг «сверено»
+data/glossary.json         словарь терминов: одно определение на все выпуски
 data/state.json            дата прошлого выпуска, seen_urls, covered_dates
 data/new_terms.csv         накопитель новых транслитераций
 data/issues/*.json         архив выпусков; сайт пересобирается из него целиком

@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+from .glossary import glossary
 from .names import by_romaji
 from .translit import lint_digest
 from .validate import sort_blocks
@@ -79,7 +80,7 @@ APPARATUS = re.compile(rf"(?P<space>[  ]?)\((?P<inside>[^()]*(?:[{CJK}]|"
 KANJI_RUN = re.compile(rf"[{CJK}]+")
 
 
-def prose(text: str, glossary: dict[str, tuple[str, str]],
+def prose(text: str, glossary_of_page: dict[str, tuple[str, str]],
           shown: set[str] | None = None) -> Markup:
     """Текст выпуска → готовый к вёрстке HTML.
 
@@ -126,10 +127,21 @@ def prose(text: str, glossary: dict[str, tuple[str, str]],
     marked = ROMAJI_NOTE.sub(romaji_note, str(escape(text)))
     marked = APPARATUS.sub(apparatus, marked)
 
+    known = glossary()
+
     def collect(match: re.Match) -> str:
+        """Пояснение уходит вниз страницы, определение берётся из словаря.
+
+        Модель пишет пояснение по месту и в контексте фразы; словарь даёт
+        одну формулировку на все выпуски. Термина нет в словаре — остаётся
+        то, что написала модель, а термин уходит в отчёт прогона кандидатом
+        (validate.check_glossary).
+        """
         term = match.group("term").strip(TERM_EDGES)
         if term:
-            glossary.setdefault(term.casefold(), (term, match.group("gloss")))
+            glossary_of_page.setdefault(
+                term.casefold(),
+                (term, known.get(term.casefold()) or match.group("gloss")))
         return match.group("term")
 
     return Markup(GLOSS.sub(collect, marked))
@@ -227,6 +239,17 @@ def render_site(issues: list[dict], out_dir: Path = SITE,
     feed.write_text(env.get_template("atom.xml").render(
         issues=issues, base_url=base_url, updated=stamp(updated)), encoding="utf-8")
     written.append(feed)
+
+    # Постоянная страница словаря: в выпуске под текстом только встреченные
+    # термины, а целиком список живёт здесь и не зависит от выпусков.
+    terms = sorted(glossary().items())
+    if terms:
+        page_dir = out_dir / "slovar"
+        page_dir.mkdir(parents=True, exist_ok=True)
+        page = page_dir / "index.html"
+        page.write_text(env.get_template("glossary.html").render(terms=terms),
+                        encoding="utf-8")
+        written.append(page)
 
     style = out_dir / "style.css"
     shutil.copyfile(TEMPLATES / "style.css", style)

@@ -410,3 +410,20 @@ def test_source_reuse_lands_in_the_report_without_blocking(digest, corpus):
     checked, report = validate(digest, corpus)
     assert checked["blocks"], "выпуск публикуется"
     assert any("одну новость" in note for note in report.warnings)
+
+
+def test_a_term_outside_the_glossary_is_reported(monkeypatch, digest, corpus):
+    """Определение такого термина написала модель — в следующий раз напишет иначе."""
+    monkeypatch.setattr("sumo_digest.validate.glossary", lambda: {"ёрикири": "…"})
+    digest["blocks"][0]["body"] = "Схватку решил хенка [уход в сторону]. " * 3
+    _, report = validate(digest, corpus)
+    assert any("терминов вне словаря" in note and "хенка" in note
+               for note in report.warnings)
+
+
+def test_terms_from_the_glossary_are_silent(monkeypatch, digest, corpus):
+    monkeypatch.setattr("sumo_digest.validate.glossary",
+                        lambda: {"ёрикири": "выталкивание в захвате"})
+    digest["blocks"][0]["body"] = "Оносато выиграл ёрикири [выталкивание в захвате]. " * 3
+    _, report = validate(digest, corpus)
+    assert not [note for note in report.warnings if "вне словаря" in note]

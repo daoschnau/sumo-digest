@@ -88,10 +88,11 @@ prompts/write.md             системный промпт писателя в
 prompts/select.md            промпт отборщика; шаг не реализован, файл кодом не читается
 prompts/translit_guide.md    §3 спецификации отдельным файлом
 src/sumo_digest/             collect, extract, basho, llm, validate, render, state, run, acceptance
-templates/                   issue.html, index.html, atom.xml, style.css
+templates/                   issue.html, index.html, glossary.html, atom.xml, style.css
 site/                        результат рендеринга (GitHub Pages)
 tests/                       фикстуры вместо сети; scripts/check_sources.py — живая проверка
 data/names.json              словарь имён: кандзи → написание и флаг «сверено»
+data/glossary.json           словарь терминов: одно определение на все выпуски
 data/state.json              дата прошлого выпуска, seen_urls и covered_dates
 data/new_terms.csv           накопитель новых транслитераций (§5 спецификации)
 data/issues/                 архив выпусков; сайт пересобирается из него целиком

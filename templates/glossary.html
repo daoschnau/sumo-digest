@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сумо-дайджест — словарь</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="alternate" type="application/atom+xml" title="Сумо-дайджест" href="../feed.xml">
+<main>
+  <h1>Словарь</h1>
+  <p class="period">
+    Термины, которые встречаются в выпусках: приёмы, ранги, дивизионы, обиход.
+    Одно определение на все выпуски — под текстом каждого выпуска стоят только
+    те из них, которые в нём действительно попались.
+  </p>
+  <section class="glossary">
+    <dl>
+      {% for term, definition in terms %}
+      <div><dt>{{ term }}</dt> <dd>— {{ definition }}</dd></div>
+      {% endfor %}
+    </dl>
+  </section>
+</main>
+<footer>
+  <a href="../">Все выпуски</a> · <a href="../feed.xml">Atom</a><br>
+  Выпуск подготовлен ИИ без ручной редактуры — важные факты сверяйте с первоисточником.
+</footer>

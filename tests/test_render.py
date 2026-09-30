@@ -416,3 +416,21 @@ def test_an_unknown_name_stays_as_it_was(dictionary):
              "blocks": [], "missed": ""}
     page = str(page_view(issue)["lead"])
     assert "Sokokurai" in page and UNVERIFIED_MARK in page
+
+
+def test_the_definition_comes_from_the_dictionary(monkeypatch, dictionary):
+    """У ёрикири в выпусках было три определения — на сайте одно."""
+    monkeypatch.setattr("sumo_digest.render.glossary",
+                        lambda: {"ёрикири": "выталкивание в захвате"})
+    issue = {"lead": "Оносато выиграл ёрикири [вынос за пределы круга].",
+             "blocks": [], "missed": ""}
+    view = page_view(issue)
+    assert view["glossary"] == [("ёрикири", "выталкивание в захвате")]
+    assert "[вынос за пределы круга]" not in str(view["lead"])
+
+
+def test_a_term_outside_the_dictionary_keeps_the_model_wording(monkeypatch, dictionary):
+    monkeypatch.setattr("sumo_digest.render.glossary", lambda: {})
+    issue = {"lead": "Приём хенка [уход в сторону на старте] решил схватку.",
+             "blocks": [], "missed": ""}
+    assert page_view(issue)["glossary"] == [("хенка", "уход в сторону на старте")]
