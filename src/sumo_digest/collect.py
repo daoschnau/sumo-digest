@@ -152,6 +152,24 @@ def tournament_reports(articles: list[Article], by_id: dict[str, dict]) -> dict[
     return reports
 
 
+def covered_day_report(url: str, source: dict, tournament: Basho | None,
+                       state: State) -> bool:
+    """Отчёт о дне турнира, который вышедший выпуск уже описал.
+
+    Единственный случай, когда статья отбрасывается не по дате публикации,
+    а по дате события. Отчёт издания о дне выходит вечером, японская пресса
+    пишет о том же дне сразу — и выпуск с этим днём уже вышел. Без этой
+    проверки хроника пересказывала последний день прошлого выпуска каждый раз,
+    причём иногда другим приёмом: 21.09.2026 «хикиотоши» по Sponichi против
+    24.09.2026 «хатакикоми» по Sumo Stomp — про одну и ту же схватку.
+    """
+    pattern = source.get("day_pattern")
+    if tournament is None or not pattern:
+        return False
+    day = day_from_url(url, pattern)
+    return day is not None and state.covered(tournament.day_date(day))
+
+
 def collect(config: dict, state: State, today: date,
             calendar: list[Basho] | None = None) -> Corpus:
     """Полный обход: источники по приоритету, затем бюджет корпуса."""
@@ -207,6 +225,10 @@ def collect(config: dict, state: State, today: date,
         """Пробует добавить статью в корпус. False — не подошла или не влезла."""
         nonlocal number
         if ref.url in taken or used.get(ref.source_id, 0) >= quota:
+            return False
+        # До запроса: день, о котором выпуск уже вышел, не нужен ни в корпусе,
+        # ни в бюджете — и запрашивать его страницу незачем.
+        if covered_day_report(ref.url, by_id[ref.source_id], tournament, state):
             return False
         html = fetcher.get(ref.url)
         if html is None:
@@ -270,7 +292,8 @@ def collect(config: dict, state: State, today: date,
     window = None
     if tournament is not None:
         window = basho_window(tournament, state.last_issue_date, today.isoformat(),
-                              tournament_reports(articles, by_id))
+                              tournament_reports(articles, by_id),
+                              covered=set(state.covered_dates))
 
     return Corpus(period_from=state.last_issue_date, period_to=today.isoformat(),
                   articles=articles, sources=statuses, basho=window)

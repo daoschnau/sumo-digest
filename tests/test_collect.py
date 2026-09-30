@@ -443,3 +443,38 @@ def test_the_chronicle_survives_a_full_field_of_sources(monkeypatch):
     # Ключевые источники по инварианту 3 всё равно весят больше остальных.
     assert used["jp1"] >= 3 and used["jp2"] >= 3, used
     assert all(count >= 1 for count in used.values()), f"источник без места: {used}"
+
+
+def test_a_day_already_described_is_not_taken_again(monkeypatch):
+    """Разбор 30.09.2026: хроника пересказывала последний день прошлого выпуска.
+
+    Японская пресса пишет о дне сразу, отчёт издания выходит вечером и приезжает
+    следующим прогоном — когда выпуск с этим днём уже вышел. Иногда с другим
+    приёмом: «хикиотоши» по Sponichi против «хатакикоми» по Sumo Stomp.
+    """
+    pages, stomp = stomp_pages(range(1, 5))
+    state = State(last_issue_date="2026-07-14")
+    # Выпуск от 14.07 описал третий день турнира (12.07 + 2).
+    state.mark_covered("2026-07-14", "2026-07-14")
+
+    config, fetcher = tournament_config(stomp, pages, BUDGET)
+    monkeypatch.setattr("sumo_digest.collect.Fetcher", lambda **_kwargs: fetcher)
+    corpus = collect(config, state, date(2026, 7, 16), NAGOYA)
+
+    days = {day.day: day.article_id for day in corpus.basho.days}
+    assert 3 not in days, "описанный день не должен вернуться ни блоком, ни днём окна"
+    assert set(days) == {4, 5}, days
+    # Страницу такого отчёта незачем даже запрашивать.
+    assert not any("day-3-results" in url for url in fetcher.visited)
+
+
+def test_a_day_the_previous_issue_missed_is_still_taken(monkeypatch):
+    """Забытый день — не описанный: память ведётся по датам блоков, а не по периоду."""
+    pages, stomp = stomp_pages(range(1, 5))
+    state = State(last_issue_date="2026-07-14")
+    config, fetcher = tournament_config(stomp, pages, BUDGET)
+    monkeypatch.setattr("sumo_digest.collect.Fetcher", lambda **_kwargs: fetcher)
+    corpus = collect(config, state, date(2026, 7, 16), NAGOYA)
+
+    # Отчёты в фикстуре есть за дни 1–4; первые два старше даты прошлого выпуска.
+    assert {day.day for day in corpus.basho.reported_days} == {3, 4}

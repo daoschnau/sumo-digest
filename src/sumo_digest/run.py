@@ -19,7 +19,7 @@ import yaml
 
 from .basho import calendar_warning, load_calendar
 from .collect import CONFIG_PATH, collect
-from .llm import DEFAULT_MODEL, repair_transliteration, write_digest
+from .llm import DEFAULT_MODEL, last_issue, repair_transliteration, write_digest
 from .models import Corpus
 from .render import ISSUES, SITE, load_issues, render_site
 from .state import State
@@ -113,6 +113,11 @@ def publish(digest: dict, corpus: Corpus, state: State, today: date,
     # уже видела и отвергла, платить за него повторно незачем.
     for article in corpus.articles:
         state.mark_seen(article.url, digest["issue_date"])
+    # И даты событий, которые выпуск описал: по ним следующий прогон поймёт,
+    # что отчёт о том же дне пересказывать во второй раз не нужно.
+    for block in digest.get("blocks", []):
+        if block.get("date"):
+            state.mark_covered(block["date"], digest["issue_date"])
     state.forget_old(today)
     state.last_issue_date = digest["issue_date"]
     state.last_issue_slug = digest["issue_date"]
@@ -196,7 +201,13 @@ def main() -> int:
     print(f"   статей в корпусе: {len(corpus.articles)}")
 
     print(f"2. write · {options.model}")
-    digest, usage = write_digest(corpus, options.model)
+    # Прошлый выпуск уходит модели заголовками: периоды соседних выпусков
+    # смыкаются, и без этого списка новое событие пересказывается второй раз.
+    previous = last_issue(corpus.period_to)
+    if previous:
+        print(f"   прошлый выпуск {previous['issue_date']}: "
+              f"{len(previous.get('blocks', []))} блоков не повторять")
+    digest, usage = write_digest(corpus, options.model, previous)
     (BUILD / "digest.raw.json").write_text(
         json.dumps(digest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     took("write")

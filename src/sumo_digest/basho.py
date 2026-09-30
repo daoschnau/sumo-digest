@@ -107,7 +107,7 @@ def day_from_url(url: str, pattern: str) -> int | None:
 
 
 def basho_window(basho: Basho, period_from: str, period_to: str,
-                 reports: dict[int, str]) -> BashoWindow:
+                 reports: dict[int, str], covered: set[str] | None = None) -> BashoWindow:
     """Дни турнира этого периода и отчёты о них из корпуса.
 
     Дни календаря и дни с отчётами объединяются, а не пересекаются. Отчёт
@@ -116,11 +116,18 @@ def basho_window(basho: Basho, period_from: str, period_to: str,
     пятнадцатого. Обратный случай тоже бывает — день периода, о котором отчёта
     ещё нет; он остаётся в списке с пустым `article_id`, чтобы модель видела,
     что о нём писать нечего.
+
+    Дни, которые вышедший выпуск уже описал (`covered` — даты из state), в окно
+    не попадают вовсе. Иначе хроника пересказывает последний день прошлого
+    выпуска каждый раз: японская пресса пишет о дне сразу, отчёт издания
+    выходит вечером и приезжает уже следующим прогоном.
     """
+    described = covered or set()
     days = set(reports)
     first, last = max(basho.start, period_from), min(basho.end, period_to)
     if first <= last:
         days.update(range(basho.day_number(first), basho.day_number(last) + 1))
+    days = {day for day in days if basho.day_date(day) not in described}
     return BashoWindow(
         id=basho.id, name=basho.name, place=basho.place,
         start=basho.start, end=basho.end,

@@ -47,3 +47,33 @@ def test_a_day_without_a_report_is_marked_as_nothing_to_write_about():
     message = build_user_message(corpus(AKI))
     line = next(row for row in message.splitlines() if row.startswith("  день 2"))
     assert "отчёта в корпусе нет" in line
+
+
+PREVIOUS = {
+    "issue_date": "2026-09-21",
+    "blocks": [{"date": "2026-09-21", "subtitle": "Девятый день: Оносато обеспечил качикоши"},
+               {"date": "2026-09-20", "subtitle": "Восьмой день: Оносато вышел вперёд один"}],
+}
+
+
+def test_the_previous_issue_is_named_so_it_is_not_retold():
+    message = build_user_message(corpus(AKI), PREVIOUS)
+    assert "В прошлом выпуске (2026-09-21)" in message
+    assert "Девятый день: Оносато обеспечил качикоши" in message
+    assert "Заново не описывать" in message
+
+
+def test_without_an_archive_there_is_no_such_section():
+    """Первый выпуск: повторять нечего, и лишнего абзаца в сообщении нет."""
+    assert "прошлом выпуске" not in build_user_message(corpus(AKI))
+
+
+def test_the_key_bout_is_asked_for_once():
+    """Схватка периода и блок её дня описывали одно и то же дважды."""
+    message = build_user_message(corpus(AKI))
+    assert "эта схватка описывается один раз" in message
+    assert "только называется в перечне результатов" in message
+
+
+def test_the_block_ceiling_is_not_a_target():
+    assert "потолок, а не цель" in build_user_message(corpus(AKI))

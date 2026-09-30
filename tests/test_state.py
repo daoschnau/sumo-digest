@@ -40,3 +40,31 @@ def test_reads_the_legacy_list_shape(tmp_path):
                                 "seen_urls": ["sha1:deadbeef"]}), encoding="utf-8")
     state = State.load(path)
     assert state.seen_urls == {"sha1:deadbeef": "2026-09-10"}
+
+
+def test_covered_dates_remember_what_the_issue_described(tmp_path):
+    """Отчёт о дне выходит вечером — выпуск с этим днём к тому времени уже вышел."""
+    state = State(last_issue_date="2026-09-21")
+    assert not state.covered("2026-09-21")
+    state.mark_covered("2026-09-21", "2026-09-21")
+    assert state.covered("2026-09-21")
+
+    path = tmp_path / "state.json"
+    state.save(path)
+    assert State.load(path).covered("2026-09-21")
+
+
+def test_old_covered_dates_are_forgotten_with_the_urls():
+    state = State(last_issue_date="2026-09-28", seen_urls_kept_days=30)
+    state.mark_covered("2026-07-26", "2026-07-26")
+    state.mark_covered("2026-09-27", "2026-09-28")
+    state.forget_old(date(2026, 9, 30))
+    assert not state.covered("2026-07-26")
+    assert state.covered("2026-09-27")
+
+
+def test_a_state_file_without_covered_dates_still_loads(tmp_path):
+    """Файл, написанный до появления памяти о днях, не должен ронять прогон."""
+    path = tmp_path / "state.json"
+    path.write_text('{"last_issue_date": "2026-09-28", "seen_urls": {}}', encoding="utf-8")
+    assert State.load(path).covered_dates == {}

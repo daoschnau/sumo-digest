@@ -21,6 +21,7 @@ from .schema import api_schema, load_schema
 from .translit import LintReport, lint_digest, read_field, write_field
 from .validate import MAX_BLOCKS, MIN_BLOCKS, ValidationFailed, validate
 
+ISSUES = Path("data/issues")
 WRITE_PROMPT = Path("prompts/write.md")
 TRANSLIT_GUIDE = Path("prompts/translit_guide.md")
 
@@ -76,12 +77,37 @@ def tournament_brief(basho: BashoWindow) -> str:
         f"- ровно один блок с category=basho_bout — самая важная схватка "
         f"периода: кто с кем, чем закончилась, почему именно она важнее "
         f"остальных. Схватку брать из отчётов о днях, а не из общих новостей.\n"
+        f"- эта схватка описывается один раз. В блоке своего дня она только "
+        f"называется в перечне результатов — без подробностей, разбора приёма "
+        f"и повторения того, что уже сказано в блоке о схватке.\n"
         f"- порядок этих блоков расставит код: дни он поставит по возрастанию, "
         f"переставлять их самому не нужно.\n"
     )
 
 
-def build_user_message(corpus: Corpus) -> str:
+def previous_issue_brief(previous: dict) -> str:
+    """Заголовки прошлого выпуска: что читатель уже видел.
+
+    Периоды соседних выпусков смыкаются по дате, и материал об одном событии
+    приходит двумя волнами: японская пресса пишет вечером того же дня, отчёт
+    англоязычного издания выходит следующим утром. Хронику дней от этого
+    защищает `state.covered_dates` (код просто не берёт такой отчёт), но
+    обычные новости так не отфильтруешь — про них модель узнаёт отсюда.
+    """
+    published = "\n".join(
+        f"  {block.get('date') or '—'} {block.get('subtitle', '')}"
+        for block in previous.get("blocks", []))
+    return (
+        f"\nВ прошлом выпуске ({previous.get('issue_date')}) читателю уже "
+        f"рассказано:\n{published}\n"
+        f"Это читатель видел. Заново не описывать — ни отдельным блоком, ни "
+        f"пересказом внутри другого. Если без прошлого события новое непонятно, "
+        f"хватит придаточного предложения, а не абзаца. Новый поворот того же "
+        f"сюжета — это новое событие, и он уместен.\n"
+    )
+
+
+def build_user_message(corpus: Corpus, previous: dict | None = None) -> str:
     sources = ", ".join(f"{s.name} — {s.status}" for s in corpus.sources)
     articles = [
         {
@@ -104,14 +130,17 @@ def build_user_message(corpus: Corpus) -> str:
         # отказом валидатора, то есть уже потерянным выпуском.
         f"Блоков в выпуске: от {MIN_BLOCKS} до {MAX_BLOCKS}. Если материала "
         f"больше, объединять близкие сюжеты, а не дробить: лишние блоки код "
-        f"отбросит по значимости.\n"
+        f"отбросит по значимости. Десять — потолок, а не цель: сколько "
+        f"самостоятельных сюжетов, столько и блоков.\n"
+        + (previous_issue_brief(previous) if previous else "")
         + (tournament_brief(corpus.basho) if corpus.basho else "")
         + f"\nСтатьи ({len(articles)}):\n"
         f"{json.dumps(articles, ensure_ascii=False, indent=1)}"
     )
 
 
-def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL) -> tuple[dict, dict]:
+def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL,
+                 previous: dict | None = None) -> tuple[dict, dict]:
     """Возвращает выпуск и статистику расхода токенов."""
     # Клиент читает ANTHROPIC_API_KEY сам и по умолчанию делает два повтора
     # с экспоненциальной паузой на 429 и 5xx — отдельный цикл ретраев не нужен.
@@ -125,7 +154,7 @@ def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL) -> tuple[dict, dict
         model=model,
         max_tokens=MAX_TOKENS,
         system=build_system(),
-        messages=[{"role": "user", "content": build_user_message(corpus)}],
+        messages=[{"role": "user", "content": build_user_message(corpus, previous)}],
         thinking={"type": "adaptive"},
         output_config={
             "effort": "high",
@@ -151,6 +180,15 @@ def write_digest(corpus: Corpus, model: str = DEFAULT_MODEL) -> tuple[dict, dict
         "cache_creation_input_tokens": getattr(response.usage, "cache_creation_input_tokens", 0),
     }
     return json.loads(text), usage
+
+
+def last_issue(before: str, directory: Path = ISSUES) -> dict | None:
+    """Последний вышедший выпуск строго раньше даты. None — архив пуст."""
+    published = sorted(path for path in directory.glob("*.json")
+                       if path.stem < before)
+    if not published:
+        return None
+    return json.loads(published[-1].read_text(encoding="utf-8"))
 
 
 REPAIR_SCHEMA = {
@@ -243,7 +281,8 @@ def main() -> int:
           f"{corpus.period_from} — {corpus.period_to}")
     print(f"модель: {options.model}")
 
-    digest, usage = write_digest(corpus, options.model)
+    digest, usage = write_digest(corpus, options.model,
+                                 last_issue(corpus.period_to))
     options.out.parent.mkdir(parents=True, exist_ok=True)
     raw_path = options.out.with_suffix(".raw.json")
     raw_path.write_text(json.dumps(digest, ensure_ascii=False, indent=2) + "\n",
