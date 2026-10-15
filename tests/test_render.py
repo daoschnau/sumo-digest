@@ -404,6 +404,17 @@ def test_a_known_romaji_note_becomes_kanji(dictionary):
     assert UNVERIFIED_MARK not in page, "сверенное имя знака вопроса не получает"
 
 
+def test_kanji_already_in_the_parenthesis_are_not_repeated(dictionary):
+    """«(翔猿, romaji: Tobizaru)» после сверки давало «(翔猿, 翔猿)» (выпуск 15.10.2026)."""
+    issue = {"lead": "Схватка с Таканошо (隆の勝, romaji: Takanosho — требует проверки) "
+                     "и с Тобидзару (飛翔富士, romaji: Tobizaru).",
+             "blocks": [], "missed": ""}
+    page = str(page_view(issue)["lead"])
+    assert page.count("隆の勝") == 1 and "Takanosho" not in page
+    assert page.count("飛翔富士") == 1 and UNVERIFIED_MARK in page
+    assert ", <" not in page and ", )" not in page
+
+
 def test_an_unverified_name_keeps_the_mark(dictionary):
     issue = {"lead": "Тобидзару (romaji: Tobizaru) в опасной зоне.",
              "blocks": [], "missed": ""}

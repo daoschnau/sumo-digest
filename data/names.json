@@ -534,6 +534,12 @@
       "romaji": "",
       "role": "rikishi",
       "verified": false
+    },
+    "翔猿": {
+      "ru": "Тобидзару",
+      "romaji": "Tobizaru",
+      "role": "rikishi",
+      "verified": true
     }
   }
 }

@@ -55,8 +55,11 @@ def stamp(value: str) -> str:
 # Модель пишет пометку двумя видами: «(romaji: Takanosho — требует проверки)»
 # и короче, «(romaji: Wakatakakage)». Ловим оба: хвост необязателен, зато
 # пометка всегда стоит в скобках, и на закрывающую скобку регулярка опирается.
+# Запятая перед пометкой входит в совпадение: если иероглифы уже стоят в той же
+# скобке, «(翔猿, romaji: Tobizaru)» должно стать «(翔猿)», а не «(翔猿, 翔猿)».
 ROMAJI_NOTE = re.compile(
-    r"romaji:\s*(?P<romaji>[A-Za-z][A-Za-z '-]*?)\s*(?:—\s*требует проверки)?\s*(?=\))")
+    r"(?P<lead>,\s*)?romaji:\s*(?P<romaji>[A-Za-z][A-Za-z '-]*?)\s*"
+    r"(?:—\s*требует проверки)?\s*(?=\))")
 
 # «тачиай [начальный сход]» — пояснение термина. Модель ставит его при первом
 # упоминании в каждом блоке (так задумано: блоки читают вразнобой и переставляет
@@ -106,10 +109,15 @@ def prose(text: str, glossary_of_page: dict[str, tuple[str, str]],
         в соседнем выпуске (разбор 30.09.2026).
         """
         romaji = match.group("romaji").strip()
+        lead = match.group("lead") or ""
         name = known.get(romaji.casefold())
         if name is None:
-            return romaji + UNVERIFIED_MARK
-        return name.kanji if name.verified else name.kanji + UNVERIFIED_MARK
+            return lead + romaji + UNVERIFIED_MARK
+        mark = "" if name.verified else UNVERIFIED_MARK
+        before = match.string[match.string.rfind("(", 0, match.start()):match.start()]
+        if name.kanji in before:
+            return mark
+        return lead + name.kanji + mark
 
     def apparatus(match: re.Match) -> str:
         inside = match.group("inside")
