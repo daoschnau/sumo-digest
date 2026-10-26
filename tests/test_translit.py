@@ -249,3 +249,29 @@ def test_a_name_from_the_dictionary_catches_a_typo(rules):
     """Словарь data/names.json даёт линтеру сотню имён без отдельных правил."""
     _, report = lint_text("Борец Онасато взял Кубок.", rules)
     assert any("«Онасато» против «Оносато»" in note for note in report.warnings)
+
+
+@pytest.mark.parametrize("text", [
+    "Кёкукайо получил западную маегаширу №16 и дебютирует в макуути.",
+    "Он занял маегаширу №16.",
+    "Победа над западной маегаширой №3.",
+    "Сохранил восточного маегаширу №1? Нет — сохранил восточную маегаширу №1.",
+])
+def test_a_rank_written_as_a_thing_is_flagged(text, rules):
+    """Выпуск 26.10.2026: «получил западную маегаширу №16» — ранг стал вещью женского рода."""
+    _, report = lint_text(text, rules)
+    assert any(problem.rule == "rank_as_thing" for problem in report.problems)
+
+
+@pytest.mark.parametrize("text", [
+    "Кёкукайо стал западным маегаширой №16 и дебютирует в макуути.",
+    "Тошинофуджи, западный маегашира №16, обыграл западного дзюрё №1.",
+    "Он поднялся до маегаширы №16.",
+    "Озеки Котодзакура победил западного маегаширу №2 Ёшинофуджи.",
+    "Схватка с восточным маегаширой №1 прошла ровно.",
+    # Выпуск 22.10.2026: «занимался» — не «занял», а маегашира здесь подлежащее.
+    "До этого у него занимался маегашира Котоэйхо.",
+])
+def test_a_rank_written_as_a_wrestler_passes(text, rules):
+    _, report = lint_text(text, rules)
+    assert not [p for p in report.problems if p.rule == "rank_as_thing"]
