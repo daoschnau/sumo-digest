@@ -275,3 +275,10 @@ def test_a_rank_written_as_a_thing_is_flagged(text, rules):
 def test_a_rank_written_as_a_wrestler_passes(text, rules):
     _, report = lint_text(text, rules)
     assert not [p for p in report.problems if p.rule == "rank_as_thing"]
+
+
+def test_wakanosho_and_dohyo_are_fixed(rules):
+    """Выпуск 29.10.2026: «Ваканокацу» вместо Ваканошо и «доторю» вместо «дохё»."""
+    fixed, report = lint_text("Ваканокацу (若ノ勝, romaji: Wakanokatsu) вышел на доторю.", rules)
+    assert fixed == "Ваканошо (若ノ勝, romaji: Wakanosho) вышел на дохё."
+    assert report.fixes
