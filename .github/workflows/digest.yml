@@ -43,6 +43,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      pushed: ${{ steps.commit.outputs.pushed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -117,6 +119,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Коммит выпуска и состояния
+        id: commit
         if: steps.digest.outcome == 'success' || steps.retry.outcome == 'success'
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then echo "dry run — не коммитим"; exit 0; fi
@@ -130,11 +133,16 @@ jobs:
           # вместе с runner'ом.
           git pull --rebase --autostash origin main
           git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
+      # Деплоим только то, что действительно ушло в main. Догоняющий запуск,
+      # заставший готовый выпуск, завершается нулём за секунду — и раньше
+      # всё равно выкладывал на Pages тот же самый сайт. 05.11.2026 такой
+      # пустой деплой десять минут висел в updating_pages и уронил прогон
+      # красным письмом, хотя выпуск давно был на сайте.
       - name: Сайт артефактом для Pages
         if: >-
-          vars.PAGES_ENABLED == 'true' && inputs.dry_run != true &&
-          (steps.digest.outcome == 'success' || steps.retry.outcome == 'success')
+          vars.PAGES_ENABLED == 'true' && steps.commit.outputs.pushed == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -143,7 +151,7 @@ jobs:
   # до того, как Pages настроены, этот job просто не запускается.
   deploy:
     needs: build
-    if: vars.PAGES_ENABLED == 'true' && inputs.dry_run != true
+    if: vars.PAGES_ENABLED == 'true' && needs.build.outputs.pushed == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
