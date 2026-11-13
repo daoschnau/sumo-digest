@@ -7,7 +7,10 @@ HOCHI_VIA = r"topics\.smt\.docomo\.ne\.jp/article/hochi/sports/hochi-([0-9]{8}-[
 
 
 def test_via_pattern_returns_canonical_hochi_urls(fixture_html):
-    """Hochi собирается из перепечаток dmenu — это решение этапа E0."""
+    """Механизм via: листинг-посредник, канонический адрес у издания.
+
+    Hochi жил на нём с E0 до 13.11.2026; сам механизм остаётся в коде.
+    """
     links = find_links(fixture_html("listings/dmenu.html"), DMENU, HOCHI_VIA,
                        "https://hochi.news/articles/{0}.html")
     assert links == [
@@ -20,6 +23,25 @@ def test_other_publishers_are_not_taken_as_hochi(fixture_html):
     links = find_links(fixture_html("listings/dmenu.html"), DMENU, HOCHI_VIA,
                        "https://hochi.news/articles/{0}.html")
     assert not any("sponichi" in link or "sanspo" in link for link in links)
+
+
+def test_hochi_reads_its_own_tag_listing(fixture_html, sources_config):
+    """С 13.11.2026 Hochi не зависит от dmenu: тот падал и тянул его за собой."""
+    source = next(s for s in sources_config["sources"] if s["id"] == "hochi")
+    assert "via" not in source, "листинг Hochi не должен идти через агрегатор"
+    links = find_links(fixture_html("listings/hochi.html"), source["listing_url"],
+                       source["link_pattern"])
+    assert links == [
+        "https://hochi.news/articles/20261113-OHT1T51398.html",
+        "https://hochi.news/articles/20261113-OHT1T51344.html",
+        "https://hochi.news/articles/20261112-OHT1T51202.html",
+    ]
+
+
+def test_hochi_tag_page_needs_the_sumo_filter(sources_config):
+    """Боковые блоки страницы тега ведут на весь спорт — отбор по слову обязателен."""
+    source = next(s for s in sources_config["sources"] if s["id"] == "hochi")
+    assert "相撲" in source.get("requires_keyword", [])
 
 
 def test_navigation_links_are_not_articles(fixture_html):

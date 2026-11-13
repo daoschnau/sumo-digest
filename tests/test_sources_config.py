@@ -33,18 +33,15 @@ def test_sponichi_pattern_takes_sumo_and_skips_other_sports(sources_config):
     assert not pattern.search(BASEBALL_ARTICLE)
 
 
-def test_hochi_is_reached_through_dmenu(sources_config):
+def test_hochi_does_not_depend_on_an_aggregator(sources_config):
+    """Через dmenu Hochi падал вместе с ним (ноябрь 2026): листинг только свой."""
     hochi = sources(sources_config)["hochi"]
-    via = hochi["via"]
-    match = re.search(via["link_pattern"],
-                      "https://topics.smt.docomo.ne.jp/article/hochi/sports/"
-                      "hochi-20260910-OHT1T51188")
-    assert match
-    canonical = via["canonical_url"].format(*match.groups())
-    assert canonical == "https://hochi.news/articles/20260910-OHT1T51188.html"
-    # Собранный адрес обязан подходить под собственный шаблон источника,
-    # иначе валидатор ссылок на E2 отвергнет собственный же выпуск.
-    assert re.search(hochi["link_pattern"], canonical)
+    assert "via" not in hochi
+    assert hochi["listing_url"].startswith("https://hochi.news/")
+    # Адрес статьи обязан подходить под шаблон источника,
+    # иначе валидатор ссылок отвергнет собственный же выпуск.
+    assert re.search(hochi["link_pattern"],
+                     "https://hochi.news/articles/20261113-OHT1T51398.html")
 
 
 def test_key_sources_stay_first_priority(sources_config):
