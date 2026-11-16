@@ -282,3 +282,26 @@ def test_wakanosho_and_dohyo_are_fixed(rules):
     fixed, report = lint_text("Ваканокацу (若ノ勝, romaji: Wakanokatsu) вышел на доторю.", rules)
     assert fixed == "Ваканошо (若ノ勝, romaji: Wakanosho) вышел на дохё."
     assert report.fixes
+
+
+def test_fujiseiun_is_fixed_in_every_case(rules):
+    """Выпуск 16.11.2026: владелец закрепил «Фуджисеун», модель писала «Фуджисейун»."""
+    fixed, report = lint_text("Атамифуджи вытолкнул Фуджисейуна, а Фуджисейун проиграл.", rules)
+    assert fixed == "Атамифуджи вытолкнул Фуджисеуна, а Фуджисеун проиграл."
+    assert report.fixes
+
+
+@pytest.mark.parametrize("text", [
+    "дожал его за соломенные тюки",
+    "в 21 год он уже борец уровня верхушки",
+])
+def test_described_terms_are_flagged(text, rules):
+    """Выпуск 16.11.2026: «соломенные тюки» вместо тавары, «верхушка» вместо саньяку."""
+    _, report = lint_text(text, rules)
+    assert report.warnings
+    assert not report.problems
+
+
+def test_terms_themselves_pass(rules):
+    _, report = lint_text("дожал его за тавару; борец уровня саньяку", rules)
+    assert not report.warnings

@@ -11,6 +11,7 @@ from sumo_digest.basho import (
     calendar_warning,
     current_basho,
     day_from_url,
+    day_label,
     load_calendar,
 )
 
@@ -103,3 +104,14 @@ def test_warning_appears_before_the_calendar_runs_out(calendar):
     assert calendar_warning(calendar, date(2026, 9, 15)) is None
     assert "2026-11-22" in calendar_warning(calendar, date(2026, 11, 1))
     assert "пуст" in calendar_warning([], date(2026, 9, 15))
+
+
+def test_day_label_comes_from_the_calendar():
+    """Выпуск 16.11.2026: блоки девятого дня шли без номера дня."""
+    assert day_label([AKI], "2026-09-21") == "9-й день Аки Басё"
+    assert day_label([AKI], "2026-09-27") == "15-й день Аки Басё"
+
+
+def test_day_label_is_none_off_season_and_without_date():
+    assert day_label([AKI], "2026-09-12") is None
+    assert day_label([AKI], None) is None

@@ -20,6 +20,8 @@ from urllib.parse import urlsplit
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+from .basho import CONFIG_PATH as BASHO_CALENDAR
+from .basho import day_label, load_calendar
 from .glossary import glossary
 from .names import by_romaji
 from .translit import lint_digest
@@ -39,6 +41,14 @@ def day(value: str) -> str:
     """2026-09-10 → «10 сентября 2026»."""
     parsed = date.fromisoformat(value)
     return f"{parsed.day} {MONTHS[parsed.month - 1]} {parsed.year}"
+
+
+def tournament_day(when: str | None, calendar_path: Path | None = None) -> str | None:
+    """Номер дня турнира для даты блока — по календарю, см. basho.day_label."""
+    calendar_path = calendar_path or BASHO_CALENDAR
+    if not when or not calendar_path.exists():
+        return None
+    return day_label(load_calendar(calendar_path), when)
 
 
 def stamp(value: str) -> str:
@@ -165,6 +175,7 @@ def page_view(issue: dict) -> dict:
     view["blocks"] = []
     for block in issue.get("blocks", []):
         prepared = dict(block)
+        prepared["tournament_day"] = tournament_day(block.get("date"))
         prepared["subtitle"] = prose(block.get("subtitle", ""), glossary, shown)
         prepared["body"] = prose(block.get("body", ""), glossary, shown)
         view["blocks"].append(prepared)
@@ -187,6 +198,9 @@ def content(issue: dict) -> str:
     parts = [f"<p>{escape(issue['lead'])}</p>"]
     for block in issue.get("blocks", []):
         parts.append(f"<h3>{escape(block['subtitle'])}</h3>")
+        when = tournament_day(block.get("date"))
+        if when:
+            parts.append(f"<p>{escape(when)}, {escape(day(block['date']))}</p>")
         parts.append(f"<p>{escape(block['body'])}</p>")
         links = ", ".join(
             f'<a href="{escape(source["url"])}">{escape(source["name"])}</a>'

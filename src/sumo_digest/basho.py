@@ -87,6 +87,23 @@ def current_basho(calendar: list[Basho], period_from: str, period_to: str) -> Ba
     return None
 
 
+def day_label(calendar: list[Basho], when: str | None) -> str | None:
+    """«9-й день Кюшу Басё» для даты события. None — дата вне турнира или её нет.
+
+    Номер дня считает код по календарю, а не пишет модель: во время басё
+    блок без номера дня — шум, «схватку переиграли» без «когда» читатель
+    не может сопоставить ни с трансляцией, ни с прошлым выпуском (разбор
+    выпуска 16.11.2026). Модель номер дня то ставит в заголовок, то нет.
+    """
+    if not when:
+        return None
+    for basho in calendar:
+        number = basho.day_number(when)
+        if number is not None:
+            return f"{number}-й день {basho.name}"
+    return None
+
+
 def day_from_url(url: str, pattern: str) -> int | None:
     """Номер дня турнира из адреса отчёта. None — адрес не про день турнира.
 

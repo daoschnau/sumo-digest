@@ -24,10 +24,14 @@
   <section class="block">
     <h2>{{ block.subtitle }}</h2>
     {# Дату блока печатаем, только когда она не совпадает с датой выпуска:
-       иначе под каждым заголовком стоит одно и то же число. #}
-    {% set shown_date = block.date if block.date and block.date != issue.issue_date %}
+       иначе под каждым заголовком стоит одно и то же число. Исключение —
+       дни турнира: номер дня печатается всегда и вместе с числом, потому что
+       выпуск выходит вечером, и «сегодня» читателя — это уже вчерашний день
+       басё (разбор выпуска 16.11.2026). #}
+    {% set shown_date = block.date if block.date and (block.tournament_day or block.date != issue.issue_date) %}
     {% if shown_date or block.place %}
     <p class="block-date">
+      {%- if block.tournament_day %}<strong>{{ block.tournament_day }}</strong> · {% endif -%}
       {%- if shown_date %}{{ shown_date | day }}{% endif -%}
       {%- if shown_date and block.place %} · {% endif -%}
       {%- if block.place %}{{ block.place }}{% endif -%}

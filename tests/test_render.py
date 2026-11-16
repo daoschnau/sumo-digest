@@ -445,3 +445,32 @@ def test_a_term_outside_the_dictionary_keeps_the_model_wording(monkeypatch, dict
     issue = {"lead": "Приём хенка [уход в сторону на старте] решил схватку.",
              "blocks": [], "missed": ""}
     assert page_view(issue)["glossary"] == [("хенка", "уход в сторону на старте")]
+
+
+def test_tournament_day_is_printed_even_on_the_issue_date(tmp_path, monkeypatch):
+    """Выпуск 16.11.2026: блок «схватку переиграли» шёл без даты и без дня турнира —
+    дата совпадала с датой выпуска, и шаблон её прятал."""
+    calendar = tmp_path / "basho.yml"
+    calendar.write_text(
+        "calendar:\n  - {id: 2026-aki, name: Аки Басё, start: 2026-09-01, end: 2026-09-15}\n",
+        encoding="utf-8")
+    monkeypatch.setattr("sumo_digest.render.BASHO_CALENDAR", calendar)
+    render_site([issue("2026-09-10", "Главное.")], tmp_path / "site",
+                base_url="https://example.test/")
+    page = (tmp_path / "site" / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "10-й день Аки Басё" in page
+    assert "10 сентября 2026 · Рёгоку Кокугикан" in page
+    feed = (tmp_path / "site" / "feed.xml").read_text(encoding="utf-8")
+    assert "10-й день Аки Басё" in feed
+
+
+def test_no_tournament_day_off_season(tmp_path, monkeypatch):
+    calendar = tmp_path / "basho.yml"
+    calendar.write_text(
+        "calendar:\n  - {id: 2026-aki, name: Аки Басё, start: 2026-09-13, end: 2026-09-27}\n",
+        encoding="utf-8")
+    monkeypatch.setattr("sumo_digest.render.BASHO_CALENDAR", calendar)
+    render_site([issue("2026-09-10", "Главное.")], tmp_path / "site",
+                base_url="https://example.test/")
+    page = (tmp_path / "site" / "2026-09-10" / "index.html").read_text(encoding="utf-8")
+    assert "день Аки Басё" not in page
