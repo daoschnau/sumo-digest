@@ -114,7 +114,13 @@ sources:
     name: dメニュー
     priority: 3
     lang: ja
-    enabled: true
+    # Выключен 16.11.2026. С 12.11 сервер не проходит TLS-рукопожатие:
+    # UNSAFE_LEGACY_RENEGOTIATION_DISABLED — он требует небезопасного
+    # пересогласования, которое OpenSSL 3 отклоняет. Ослаблять TLS ради
+    # агрегатора третьего приоритета, который перепечатывает уже обходимые
+    # издания, не стоит. Вернуть — enabled: true, когда check_sources.py
+    # снова получит листинг.
+    enabled: false
     listing_url: "https://sumo.sports.smt.docomo.ne.jp/news/"
     rss: null
     # Проверено на E0: сам dmenu статей не держит, ссылки ведут на
