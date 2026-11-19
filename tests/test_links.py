@@ -81,3 +81,12 @@ def test_comment_pages_do_not_become_day_reports(fixture_html, sources_config):
                        source["listing_url"], source["link_pattern"])
     assert not any("/comments" in link or "quot" in link for link in links)
     assert len(links) == len(set(links))
+
+
+def test_broken_address_in_page_text_is_skipped():
+    """Обрывок с «[» в JSON листинга — не адрес, а не повод ронять обход (18.11.2026)."""
+    html = ('<a href="https://hochi.news/articles/20261118-OHT1T51500.html">x</a>'
+            '<script>{"u":"https://hochi.news]/broken[x","p":"//[::1"}</script>')
+    links = find_links(html, "https://hochi.news/tag/sumo/",
+                       r"hochi\.news/articles/[0-9]{8}-[A-Z0-9]+\.html")
+    assert links == ["https://hochi.news/articles/20261118-OHT1T51500.html"]

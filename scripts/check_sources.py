@@ -21,13 +21,13 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
 
 from sumo_digest.basho import current_basho, load_calendar
-from sumo_digest.links import ABSOLUTE_URL, QUOTED_PATH, PageLinks, normalize_url, robots_allows
+from sumo_digest.links import ABSOLUTE_URL, QUOTED_PATH, PageLinks, absolute_url, robots_allows
 
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "sources.yml"
 BASHO = Path(__file__).resolve().parent.parent / "config" / "basho.yml"
@@ -74,8 +74,8 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     def candidates(raw_links) -> dict[str, None]:
         found: dict[str, None] = {}
         for raw in raw_links:
-            absolute = normalize_url(urljoin(str(response.url), raw))
-            if pattern.search(absolute):
+            absolute = absolute_url(str(response.url), raw)
+            if absolute and pattern.search(absolute):
                 found.setdefault(absolute, None)
         return found
 
@@ -105,7 +105,9 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
                      + ABSOLUTE_URL.findall(response.text)
                      + QUOTED_PATH.findall(response.text))
         for raw in raw_links:
-            absolute = normalize_url(urljoin(str(response.url), raw))
+            absolute = absolute_url(str(response.url), raw)
+            if absolute is None:
+                continue
             # Хост не фильтруем: часть изданий держит статьи на соседнем домене
             # (dmenu — на topics.smt.docomo.ne.jp), и именно он нам и нужен.
             if urlsplit(absolute).netloc:
@@ -128,12 +130,14 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
         external: dict[str, int] = {}
         api_like: dict[str, None] = {}
         for raw in raw_links:
-            absolute = urljoin(str(response.url), raw)
+            absolute = absolute_url(str(response.url), raw)
+            if absolute is None:
+                continue
             netloc = urlsplit(absolute).netloc
             if netloc and not netloc.endswith(host.split(".", 1)[-1]):
                 external[netloc] = external.get(netloc, 0) + 1
             if API_LIKE.search(absolute):
-                api_like.setdefault(normalize_url(absolute), None)
+                api_like.setdefault(absolute, None)
 
         if external:
             top = sorted(external.items(), key=lambda kv: -kv[1])[:8]
@@ -146,12 +150,12 @@ def check(source: dict, defaults: dict, show: int) -> tuple[str, int]:
     if parser.feeds:
         print("    RSS/Atom на странице:")
         for feed in dict.fromkeys(parser.feeds):
-            print(f"      {urljoin(str(response.url), feed)}")
+            print(f"      {absolute_url(str(response.url), feed) or feed}")
     else:
         print("    RSS/Atom: не объявлен")
 
-    feed_links = {normalize_url(urljoin(str(response.url), href)) for href in parser.hrefs
-                  if FEEDISH.search(href)}
+    feed_links = {link for href in parser.hrefs if FEEDISH.search(href)
+                  if (link := absolute_url(str(response.url), href))}
     if feed_links:
         print("    похожие на фид ссылки со страницы:")
         for link in sorted(feed_links)[:5]:
@@ -213,7 +217,9 @@ def probe(url: str, defaults: dict, save: Path | None = None) -> None:
                  + QUOTED_PATH.findall(response.text))
     groups: dict[str, list[str]] = {}
     for raw in raw_links:
-        absolute = normalize_url(urljoin(str(response.url), raw))
+        absolute = absolute_url(str(response.url), raw)
+        if absolute is None:
+            continue
         parts = urlsplit(absolute)
         if not parts.netloc:
             continue

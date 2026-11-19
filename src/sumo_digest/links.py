@@ -72,6 +72,19 @@ def normalize_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
+def absolute_url(base_url: str, raw: str) -> str | None:
+    """Нормализованный абсолютный адрес или None, если строку адресом не собрать.
+
+    В JSON листинга попадаются обрывки вроде «https://x]…»: urllib видит в них
+    IPv6-хост и бросает ValueError. Один такой мусор не должен ронять обход —
+    18.11.2026 он уронил весь выпуск.
+    """
+    try:
+        return normalize_url(urljoin(base_url, raw))
+    except ValueError:
+        return None
+
+
 def url_key(url: str) -> str:
     """Ключ адреса для state.seen_urls."""
     return "sha1:" + hashlib.sha1(normalize_url(url).encode("utf-8")).hexdigest()
@@ -96,7 +109,9 @@ def find_links(html: str, base_url: str, pattern: str,
     found, _ = raw_links(html)
     links: dict[str, None] = {}
     for raw in found:
-        absolute = normalize_url(urljoin(base_url, raw))
+        absolute = absolute_url(base_url, raw)
+        if absolute is None:
+            continue
         match = compiled.search(absolute)
         if not match:
             continue
