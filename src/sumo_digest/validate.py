@@ -14,6 +14,7 @@ from datetime import date, timedelta
 
 from jsonschema import Draft202012Validator
 
+from .basho import Basho, load_calendar
 from .glossary import glossary
 from .models import Corpus
 from .schema import load_schema
@@ -291,6 +292,35 @@ def block_order(block: dict) -> tuple[int, int, int]:
     )
 
 
+def tournament_day(when: str | None, calendar: list[Basho]) -> int | None:
+    """Порядковый номер даты, если она приходится на день турнира. Иначе None."""
+    if not when:
+        return None
+    for basho in calendar:
+        if basho.day_number(when) is not None:
+            return date.fromisoformat(when).toordinal()
+    return None
+
+
+def reading_order(block: dict, calendar: list[Basho]) -> tuple:
+    """Порядок блоков в выпуске: дни турнира по порядку, внутри дня — block_order.
+
+    Выпуск 19.11.2026 читался винегретом: отчёт о 12-м дне со значимостью 5
+    стоял между двумя блоками 10-го дня, потому что значимость шла первой
+    для всех блоков, а по возрастанию дат сортировалась только хроника дней.
+    Во время басё выпуск — рассказ о днях турнира, и читатель держит в голове
+    турнирную таблицу: 12-й день перед 10-м её ломает. Поэтому блоки, чья дата
+    приходится на день турнира, идут первыми и по порядку дней, а внутри дня —
+    по значимости и рубрике. Остальные блоки — следом, прежним правилом.
+
+    День определяет календарь (config/basho.yml), а не рубрика и не модель.
+    """
+    ordinal = tournament_day(block.get("date"), calendar)
+    if ordinal is not None:
+        return (0, ordinal, *block_order(block))
+    return (1, 0, *block_order(block))
+
+
 def trim_blocks(digest: dict) -> tuple[dict, list[dict]]:
     """Отсортировать и срезать хвост, если блоков больше потолка.
 
@@ -309,13 +339,16 @@ def trim_blocks(digest: dict) -> tuple[dict, list[dict]]:
     return digest, dropped
 
 
-def sort_blocks(digest: dict) -> dict:
-    """Порядок блоков определяет код, а не модель.
+def sort_blocks(digest: dict, calendar: list[Basho] | None = None) -> dict:
+    """Порядок блоков определяет код, а не модель (см. reading_order).
 
     Модель систематически ставит первым то, о чём написала подробнее,
-    а не то, что важнее.
+    а не то, что важнее. Лишние блоки отбрасывает trim_blocks — по значимости,
+    до этой сортировки: хронология решает, где блок стоит, а не останется ли он.
     """
-    digest["blocks"] = sorted(digest.get("blocks", []), key=block_order)
+    calendar = load_calendar() if calendar is None else calendar
+    digest["blocks"] = sorted(digest.get("blocks", []),
+                              key=lambda block: reading_order(block, calendar))
     return digest
 
 

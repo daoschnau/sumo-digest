@@ -4,6 +4,7 @@ import copy
 
 import pytest
 
+from sumo_digest.basho import Basho
 from sumo_digest.models import (
     Article,
     BashoDay,
@@ -19,6 +20,7 @@ from sumo_digest.validate import (
     check_facts,
     check_source_reuse,
     sort_blocks,
+    trim_blocks,
     validate,
 )
 
@@ -260,6 +262,10 @@ def basho_corpus(corpus: Corpus, reported: dict[int, str]) -> Corpus:
     return corpus
 
 
+KYUSHU = Basho(id="2026-kyushu", name="Кюшу Басё", place="Фукуока",
+               start="2026-11-08", end="2026-11-22")
+
+
 def day_block(day: int, article_id: str) -> dict:
     return {
         "date": f"2026-09-{12 + day:02d}",
@@ -278,11 +284,11 @@ def test_tournament_days_are_read_in_order_not_newest_first():
     assert [block["date"] for block in ordered] == ["2026-09-13", "2026-09-14", "2026-09-15"]
 
 
-def test_the_key_bout_leads_the_chronicle_and_both_lead_the_news():
-    """Две недели из шести турнир и есть новость — при равной значимости."""
-    news = {"date": "2026-09-15", "subtitle": "Бандзуке на Кюсю Басё", "body": "текст" * 20,
+def test_the_key_bout_leads_its_day_and_the_day_leads_the_news():
+    """Внутри одного дня — схватка, хроника, новости: при равной значимости."""
+    news = {"date": "2026-09-13", "subtitle": "Бандзуке на Кюсю Басё", "body": "текст" * 20,
             "category": "makuuchi_juryo", "importance": 5, "source_ids": ["a009"]}
-    bout = {"date": "2026-09-15", "subtitle": "Схватка дня: Оносато — Хошорю",
+    bout = {"date": "2026-09-13", "subtitle": "Схватка дня: Оносато — Хошорю",
             "body": "текст" * 20, "category": "basho_bout", "importance": 5,
             "source_ids": ["a003"]}
     ordered = sort_blocks({"blocks": [news, day_block(1, "a001"), bout]})["blocks"]
@@ -295,9 +301,52 @@ def test_importance_still_beats_the_tournament_rubric():
     withdrawal = {"date": "2026-09-15", "subtitle": "Хошорю снялся с Аки Басё",
                   "body": "текст" * 20, "category": "injury", "importance": 5,
                   "source_ids": ["a009"]}
-    ordered = sort_blocks({"blocks": [dict(day_block(1, "a001"), importance=3),
+    ordered = sort_blocks({"blocks": [dict(day_block(3, "a003"), importance=3),
                                       withdrawal]})["blocks"]
     assert [block["category"] for block in ordered] == ["injury", "basho_day"]
+
+
+def test_tournament_days_go_in_order_whatever_the_importance():
+    """Выпуск 19.11.2026: 12-й день со значимостью 5 стоял между блоками 10-го."""
+    def block(when, category, importance):
+        return {"date": when, "category": category, "importance": importance,
+                "subtitle": f"{when} {category} {importance}"}
+    blocks = [block("2026-11-17", "basho_bout", 5),
+              block("2026-11-19", "makuuchi_juryo", 5),
+              block("2026-11-17", "basho_day", 4),
+              block("2026-11-18", "basho_day", 4),
+              block("2026-11-19", "lower_divisions", 2),
+              block("2026-11-19", "makuuchi_juryo", 3)]
+    ordered = sort_blocks({"blocks": blocks}, calendar=[KYUSHU])["blocks"]
+    assert [(b["date"], b["category"], b["importance"]) for b in ordered] == [
+        ("2026-11-17", "basho_bout", 5),
+        ("2026-11-17", "basho_day", 4),
+        ("2026-11-18", "basho_day", 4),
+        ("2026-11-19", "makuuchi_juryo", 5),
+        ("2026-11-19", "makuuchi_juryo", 3),
+        ("2026-11-19", "lower_divisions", 2),
+    ]
+
+
+def test_blocks_outside_the_tournament_follow_its_days():
+    """Новость до первого дня и блок без даты — после хроники, прежним правилом."""
+    blocks = [{"category": "injury", "importance": 5, "date": "2026-11-06"},
+              {"category": "other", "importance": 5},
+              {"category": "basho_day", "importance": 2, "date": "2026-11-09"}]
+    ordered = sort_blocks({"blocks": blocks}, calendar=[KYUSHU])["blocks"]
+    assert [b.get("date") for b in ordered] == ["2026-11-09", "2026-11-06", None]
+
+
+def test_trimming_still_drops_by_importance_not_by_date():
+    """Хронология решает, где блок стоит, а не останется ли он в выпуске."""
+    blocks = [{"category": "makuuchi_juryo", "importance": 1, "date": "2026-11-09",
+               "subtitle": "лишний"}]
+    blocks += [{"category": "makuuchi_juryo", "importance": 4,
+                "date": f"2026-11-{10 + i:02d}", "subtitle": str(i)}
+               for i in range(MAX_BLOCKS)]
+    kept, dropped = trim_blocks({"blocks": blocks})
+    assert [b["subtitle"] for b in dropped] == ["лишний"]
+    assert len(kept["blocks"]) == MAX_BLOCKS
 
 
 def test_a_day_report_left_out_of_the_issue_is_reported_but_published(digest, corpus):

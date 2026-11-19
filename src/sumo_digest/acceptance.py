@@ -25,9 +25,9 @@ from .translit import lint_digest
 from .validate import (
     MAX_BLOCKS,
     MIN_BLOCKS,
-    block_order,
     check_completeness_claims,
     check_source_reuse,
+    reading_order,
 )
 
 SOURCES = Path("config/sources.yml")
@@ -105,8 +105,10 @@ def check_issue(issue: dict) -> list[Check]:
                         MIN_BLOCKS <= count <= MAX_BLOCKS or issue.get("quiet_period"),
                         f"блоков: {count}"))
 
-    order = [block_order(block) for block in blocks]
-    checks.append(Check("Блоки отсортированы по значимости", order == sorted(order)))
+    calendar = load_calendar()
+    order = [reading_order(block, calendar) for block in blocks]
+    checks.append(Check("Блоки отсортированы: дни турнира по порядку, внутри — по значимости",
+                        order == sorted(order)))
 
     # Турнирная часть. Корпуса у приёмки нет, поэтому она судит по проверяемым
     # фактам о самом выпуске: календарю турниров и перечню просмотренных
