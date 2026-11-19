@@ -101,8 +101,10 @@ def test_window_of_a_tournament_that_has_not_started_yet():
 
 
 def test_warning_appears_before_the_calendar_runs_out(calendar):
-    assert calendar_warning(calendar, date(2026, 9, 15)) is None
-    assert "2026-11-22" in calendar_warning(calendar, date(2026, 11, 1))
+    assert calendar_warning(calendar, date(2026, 11, 19)) is None
+    assert "2028-11-26" in calendar_warning(calendar, date(2028, 11, 1))
+    assert calendar_warning([AKI], date(2026, 8, 1)) is None
+    assert "2026-09-27" in calendar_warning([AKI], date(2026, 9, 1))
     assert "пуст" in calendar_warning([], date(2026, 9, 15))
 
 
@@ -110,6 +112,13 @@ def test_day_label_comes_from_the_calendar():
     """Выпуск 16.11.2026: блоки девятого дня шли без номера дня."""
     assert day_label([AKI], "2026-09-21") == "9-й день Аки Басё"
     assert day_label([AKI], "2026-09-27") == "15-й день Аки Басё"
+
+
+def test_calendar_runs_through_2028(calendar):
+    """Расписание 2027–2028 с sumo.or.jp, внесено 19.11.2026."""
+    assert current_basho(calendar, "2027-01-12", "2027-01-15").id == "2027-hatsu"
+    assert current_basho(calendar, "2027-11-29", "2027-12-31") is None
+    assert day_label(calendar, "2028-11-26") == "15-й день Кюшу Басё"
 
 
 def test_day_label_is_none_off_season_and_without_date():
