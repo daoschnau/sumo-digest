@@ -77,7 +77,7 @@ def absolute_url(base_url: str, raw: str) -> str | None:
 
     В JSON листинга попадаются обрывки вроде «https://x]…»: urllib видит в них
     IPv6-хост и бросает ValueError. Один такой мусор не должен ронять обход —
-    18.11.2026 он уронил весь выпуск.
+    19.11.2026 он уронил весь выпуск.
     """
     try:
         return normalize_url(urljoin(base_url, raw))
