@@ -474,3 +474,15 @@ def test_no_tournament_day_off_season(tmp_path, monkeypatch):
                 base_url="https://example.test/")
     page = (tmp_path / "site" / "2026-09-10" / "index.html").read_text(encoding="utf-8")
     assert "день Аки Басё" not in page
+
+
+def test_yen_amounts_get_dollars_on_the_page_and_in_the_feed(tmp_path):
+    """«4 784 848 иен» читателю ничего не говорит без курса в голове."""
+    donated = issue("2026-11-26", "Ассоциация перечислит префектуре Кумамото 4 784 848 иен.")
+    render_site([donated], tmp_path, base_url="https://example.test/")
+
+    html = (tmp_path / "2026-11-26" / "index.html").read_text(encoding="utf-8")
+    feed = (tmp_path / "feed.xml").read_text(encoding="utf-8")
+    assert "4 784 848 иен (≈ $" in html
+    assert "4 784 848 иен (≈ $" in feed
+    assert "≈" not in donated["lead"], "данные выпуска не меняются"

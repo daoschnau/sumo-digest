@@ -23,6 +23,7 @@ from markupsafe import Markup
 from .basho import CONFIG_PATH as BASHO_CALENDAR
 from .basho import day_label, load_calendar
 from .glossary import glossary
+from .money import rate_on, with_dollars
 from .names import by_romaji
 from .translit import lint_digest
 from .validate import sort_blocks
@@ -94,7 +95,7 @@ KANJI_RUN = re.compile(rf"[{CJK}]+")
 
 
 def prose(text: str, glossary_of_page: dict[str, tuple[str, str]],
-          shown: set[str] | None = None) -> Markup:
+          shown: set[str] | None = None, yen_per_usd: float | None = None) -> Markup:
     """Текст выпуска → готовый к вёрстке HTML.
 
     Данные не трогаем: и пометка о проверке, и пояснения терминов остаются
@@ -107,6 +108,8 @@ def prose(text: str, glossary_of_page: dict[str, tuple[str, str]],
     и порядок им задаёт код), но на собранной странице «Оносато (大の里)»
     повторялось до десяти раз за выпуск. Повторы снимаются здесь, в вёрстке,
     а не правилом модели: в JSON и в фиде написание остаётся при каждом блоке.
+
+    `yen_per_usd` — курс на дату выпуска: суммы в иенах получают «(≈ $N)».
     """
     seen = shown if shown is not None else set()
     known = by_romaji()
@@ -142,7 +145,7 @@ def prose(text: str, glossary_of_page: dict[str, tuple[str, str]],
             seen.add(kanji[0])
         return f'{match.group("space")}<span class="aside">({inside})</span>'
 
-    marked = ROMAJI_NOTE.sub(romaji_note, str(escape(text)))
+    marked = ROMAJI_NOTE.sub(romaji_note, str(escape(with_dollars(text, yen_per_usd))))
     marked = APPARATUS.sub(apparatus, marked)
 
     known = glossary()
@@ -170,17 +173,18 @@ def page_view(issue: dict) -> dict:
     glossary: dict[str, tuple[str, str]] = {}
     # Иероглифы — один раз на страницу, в порядке чтения: лид, блоки, «мимо кассы».
     shown: set[str] = set()
+    rate = rate_on(issue["issue_date"]) if issue.get("issue_date") else None
     view = dict(issue)
-    view["lead"] = prose(issue.get("lead", ""), glossary, shown)
+    view["lead"] = prose(issue.get("lead", ""), glossary, shown, rate)
     view["blocks"] = []
     for block in issue.get("blocks", []):
         prepared = dict(block)
         prepared["tournament_day"] = tournament_day(block.get("date"))
-        prepared["subtitle"] = prose(block.get("subtitle", ""), glossary, shown)
-        prepared["body"] = prose(block.get("body", ""), glossary, shown)
+        prepared["subtitle"] = prose(block.get("subtitle", ""), glossary, shown, rate)
+        prepared["body"] = prose(block.get("body", ""), glossary, shown, rate)
         view["blocks"].append(prepared)
     if issue.get("missed"):
-        view["missed"] = prose(issue["missed"], glossary, shown)
+        view["missed"] = prose(issue["missed"], glossary, shown, rate)
     view["glossary"] = list(glossary.values())
     return view
 
@@ -195,20 +199,25 @@ def has_unverified(view: dict) -> bool:
 
 def content(issue: dict) -> str:
     """Текст выпуска для <content> в фиде: полный, а не тизер."""
-    parts = [f"<p>{escape(issue['lead'])}</p>"]
+    rate = rate_on(issue["issue_date"])
+
+    def text(value: str) -> str:
+        return escape(with_dollars(value, rate))
+
+    parts = [f"<p>{text(issue['lead'])}</p>"]
     for block in issue.get("blocks", []):
-        parts.append(f"<h3>{escape(block['subtitle'])}</h3>")
+        parts.append(f"<h3>{text(block['subtitle'])}</h3>")
         when = tournament_day(block.get("date"))
         if when:
             parts.append(f"<p>{escape(when)}, {escape(day(block['date']))}</p>")
-        parts.append(f"<p>{escape(block['body'])}</p>")
+        parts.append(f"<p>{text(block['body'])}</p>")
         links = ", ".join(
             f'<a href="{escape(source["url"])}">{escape(source["name"])}</a>'
             for source in block.get("sources", []))
         if links:
             parts.append(f"<p>Источники: {links}</p>")
     if issue.get("missed"):
-        parts.append(f"<p>Мимо кассы: {escape(issue['missed'])}</p>")
+        parts.append(f"<p>Мимо кассы: {text(issue['missed'])}</p>")
     return "".join(parts)
 
 

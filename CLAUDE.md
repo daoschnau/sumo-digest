@@ -83,6 +83,7 @@ ruff check .                             # линт (форматировани�
 ```
 config/sources.yml         закрытый список источников
 config/basho.yml           календарь хонбасё: даты турниров, руками раз в год
+config/fx.yml              курс иены к доллару для «(≈ $N)» в вёрстке, руками
 config/translit_rules.yml  правила линтера транслитерации
 schema/digest.schema.json  контракт выходного JSON
 prompts/write.md           системный промпт писателя
